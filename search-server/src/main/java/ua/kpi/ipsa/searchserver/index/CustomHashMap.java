@@ -7,6 +7,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class CustomHashMap<K> {
 
     private static final int BUCKET_COUNT = 1 << 20;
+    private static final int LOCK_COUNT = 1 << 8;
 
     private static class Entry<K> {
         final K key;
@@ -21,12 +22,12 @@ public class CustomHashMap<K> {
     }
 
     private final AtomicReferenceArray<Entry<K>> buckets = new AtomicReferenceArray<>(BUCKET_COUNT);
-    private final ReentrantLock[] bucketLocks = new ReentrantLock[BUCKET_COUNT];
+    private final ReentrantLock[] locks = new ReentrantLock[LOCK_COUNT];
     private final AtomicInteger keyCount = new AtomicInteger(0);
 
     public CustomHashMap() {
-        for (int i = 0; i < BUCKET_COUNT; i++) {
-            bucketLocks[i] = new ReentrantLock();
+        for (int i = 0; i < LOCK_COUNT; i++) {
+            locks[i] = new ReentrantLock();
         }
     }
 
@@ -34,6 +35,10 @@ public class CustomHashMap<K> {
         int h = key.hashCode();
         h ^= (h >>> 16);
         return h & (BUCKET_COUNT - 1);
+    }
+
+    private ReentrantLock lockFor(int bucketIdx) {
+        return locks[bucketIdx & (LOCK_COUNT - 1)];
     }
 
     public ConcurrentPostingList getOrCreate(K key) {
@@ -44,7 +49,7 @@ public class CustomHashMap<K> {
             return existing.value;
         }
 
-        ReentrantLock lock = bucketLocks[idx];
+        ReentrantLock lock = lockFor(idx);
         lock.lock();
         try {
             existing = findInBucket(buckets.get(idx), key);
