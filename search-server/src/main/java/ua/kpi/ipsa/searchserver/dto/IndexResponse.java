@@ -1,4 +1,10 @@
 package ua.kpi.ipsa.searchserver.dto;
 
-public record IndexResponse(String status, int documentsIndexed, long timeMs) {
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public record IndexResponse(
+        String status,
+        @JsonProperty("documents_indexed") int documentsIndexed,
+        @JsonProperty("time_ms") long timeMs
+) {
 }
