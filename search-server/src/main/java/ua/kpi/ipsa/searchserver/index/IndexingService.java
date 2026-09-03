@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -23,6 +24,7 @@ public class IndexingService {
     private String datasetPath;
 
     private volatile InvertedIndex index = new InvertedIndex();
+    private volatile ConcurrentHashMap<String, String> docTitles = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private volatile int documentsIndexed = 0;
@@ -31,6 +33,7 @@ public class IndexingService {
 
     public IndexResult buildIndex(int threadCount) {
         InvertedIndex newIndex = new InvertedIndex();
+        ConcurrentHashMap<String, String> newTitles = new ConcurrentHashMap<>();
 
         List<Path> files = listDatasetFiles();
         ThreadPool pool = new ThreadPool(threadCount);
@@ -41,7 +44,7 @@ public class IndexingService {
         long start = System.currentTimeMillis();
 
         for (List<Path> chunk : chunks) {
-            pool.submit(() -> indexChunk(chunk, newIndex, indexedCounter));
+            pool.submit(() -> indexChunk(chunk, newIndex, newTitles, indexedCounter));
         }
 
         pool.awaitCompletion();
@@ -50,6 +53,7 @@ public class IndexingService {
         long elapsed = System.currentTimeMillis() - start;
 
         index = newIndex;
+        docTitles = newTitles;
         documentsIndexed = indexedCounter.get();
         lastBuildTimeMs = elapsed;
         lastThreadsUsed = threadCount;
@@ -57,7 +61,8 @@ public class IndexingService {
         return new IndexResult(documentsIndexed, elapsed);
     }
 
-    private void indexChunk(List<Path> chunk, InvertedIndex targetIndex, AtomicInteger counter) {
+    private void indexChunk(List<Path> chunk, InvertedIndex targetIndex,
+            ConcurrentHashMap<String, String> targetTitles, AtomicInteger counter) {
         for (Path file : chunk) {
             try (BufferedReader reader = Files.newBufferedReader(file)) {
                 String line;
@@ -72,6 +77,9 @@ public class IndexingService {
 
                         if (docId != null && !text.isBlank()) {
                             targetIndex.addDocument(docId, text);
+                            if (product.title() != null) {
+                                targetTitles.put(docId, product.title());
+                            }
                             counter.incrementAndGet();
                         }
                     } catch (Exception e) {
@@ -124,6 +132,10 @@ public class IndexingService {
 
     public InvertedIndex getIndex() {
         return index;
+    }
+
+    public String getTitle(String docId) {
+        return docTitles.getOrDefault(docId, "");
     }
 
     public int getDocumentsIndexed() {

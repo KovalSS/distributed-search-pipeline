@@ -26,11 +26,11 @@ public class SearchController {
     public SearchResponse search(@RequestBody SearchRequest request) {
         long start = System.currentTimeMillis();
 
-        List<SearchService.ScoredDoc> scored = searchService.keywordSearch(request.query());
+        List<SearchService.ScoredDoc> scored = searchService.keywordSearch(request.query(), request.top());
 
         List<SearchResponse.SearchResult> results = new ArrayList<>();
         for (SearchService.ScoredDoc doc : scored) {
-            results.add(new SearchResponse.SearchResult(doc.docId(), doc.score(), ""));
+            results.add(new SearchResponse.SearchResult(doc.docId(), doc.score(), doc.title()));
         }
 
         long elapsed = System.currentTimeMillis() - start;
