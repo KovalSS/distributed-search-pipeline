@@ -24,6 +24,10 @@ public class SearchController {
 
     @PostMapping("/search")
     public SearchResponse search(@RequestBody SearchRequest request) {
+        if (request.query() == null || request.query().isBlank()) {
+            return new SearchResponse(List.of(), 0);
+        }
+
         long start = System.currentTimeMillis();
 
         List<SearchService.ScoredDoc> scored = searchService.keywordSearch(request.query(), request.top());

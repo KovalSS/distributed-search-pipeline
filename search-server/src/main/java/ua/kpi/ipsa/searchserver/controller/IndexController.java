@@ -21,7 +21,10 @@ public class IndexController {
 
     @PostMapping("/index")
     public IndexResponse index(@RequestBody IndexRequest request) {
-        IndexingService.IndexResult result = indexingService.buildIndex(request.threads());
+        int threads = (request.threads() == null || request.threads() <= 0)
+                ? Runtime.getRuntime().availableProcessors()
+                : request.threads();
+        IndexingService.IndexResult result = indexingService.buildIndex(threads);
         return new IndexResponse("ok", result.documentsIndexed(), result.timeMs());
     }
 }
