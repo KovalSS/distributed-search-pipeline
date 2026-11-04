@@ -31,7 +31,11 @@ public class IndexingService {
     private volatile long lastBuildTimeMs = 0;
     private volatile int lastThreadsUsed = 0;
 
-    public IndexResult buildIndex(int threadCount) {
+    public synchronized IndexResult buildIndex(int threadCount) {
+        this.index = new InvertedIndex();
+        this.docTitles = new ConcurrentHashMap<>();
+        System.gc();
+
         InvertedIndex newIndex = new InvertedIndex();
         ConcurrentHashMap<String, String> newTitles = new ConcurrentHashMap<>();
 
