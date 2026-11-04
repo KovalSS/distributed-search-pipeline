@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Distributed Search Engine</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-top">
+        <div>
+          <h1>Distributed Search Engine</h1>
+          <p class="subtitle">Full-text inverted index with Ollama (LLM) and WebSocket</p>
+        </div>
+        <div class="system-status">
+          <span class="badge" id="badge-server">Server: ...</span>
+          <span class="badge" id="badge-ollama">Ollama: ...</span>
+          <span class="badge" id="badge-index">Index: ...</span>
+        </div>
+      </div>
+
+      <div id="no-index-alert" class="alert-warning" hidden>
+        Warning: Index has not been built in memory yet (0 documents). Go to the "Indexing &amp; Benchmarks" tab to run indexing.
+      </div>
+
+      <nav class="tabs-nav">
+        <button type="button" class="tab-btn active" data-tab="tab-search">Search</button>
+        <button type="button" class="tab-btn" data-tab="tab-index">Indexing &amp; Benchmarks</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="tab-search" class="tab-content active">
+        <form id="search-form" class="search-form">
+          <input type="text" id="query-input" placeholder="Enter query in English (e.g., candle lighter, coffee maker...)" autocomplete="off" required />
+          <input type="number" id="top-input" min="1" max="50" value="5" title="Top N" />
+          <button type="submit" id="search-btn">Search</button>
+        </form>
+
+        <div class="pipeline-container">
+          <div class="step" id="step-expansion">
+            <span class="step-num">1</span>
+            <span class="step-label">Query Expansion</span>
+          </div>
+          <div class="step-arrow">➔</div>
+          <div class="step" id="step-search">
+            <span class="step-num">2</span>
+            <span class="step-label">Keyword Search</span>
+          </div>
+          <div class="step-arrow">➔</div>
+          <div class="step" id="step-done">
+            <span class="step-num">3</span>
+            <span class="step-label">Done</span>
+          </div>
+        </div>
+
+        <div id="status-line" class="status-line"></div>
+
+        <section id="expansion-section" class="card-section" hidden>
+          <h3>Generated Synonyms (Ollama LLM):</h3>
+          <div id="expansion-chips" class="chips-container"></div>
+        </section>
+
+        <section id="results-section" class="card-section" hidden>
+          <h3 id="results-heading">Results:</h3>
+          <div id="results-list" class="results-list"></div>
+        </section>
+      </section>
+
+      <section id="tab-index" class="tab-content">
+        <div class="index-card">
+          <h2>Inverted Index Build Management</h2>
+          <p class="card-desc">Specify worker thread count for custom ThreadPool and build the dataset index.</p>
+
+          <form id="index-form" class="index-form">
+            <div class="input-group">
+              <label for="threads-input">Worker threads count:</label>
+              <div class="threads-selector">
+                <input type="number" id="threads-input" min="1" max="32" value="8" required />
+                <div class="quick-threads">
+                  <button type="button" class="btn-chip" data-threads="1">1</button>
+                  <button type="button" class="btn-chip" data-threads="2">2</button>
+                  <button type="button" class="btn-chip" data-threads="4">4</button>
+                  <button type="button" class="btn-chip" data-threads="8">8</button>
+                  <button type="button" class="btn-chip" data-threads="12">12</button>
+                  <button type="button" class="btn-chip" data-threads="16">16</button>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" id="build-index-btn">Build Index</button>
+          </form>
+
+          <div id="index-progress" class="index-progress" hidden>
+            <div class="spinner"></div>
+            <span id="index-progress-text">Indexing in progress... Time: 0.0 s</span>
+          </div>
+
+          <div id="index-result-alert" class="alert-success" hidden></div>
+        </div>
+
+        <div class="history-card">
+          <h3>Index Build Benchmark History</h3>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Threads</th>
+                <th>Indexed Documents</th>
+                <th>Time (ms)</th>
+                <th>Time (s)</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-tbody">
+              <tr id="no-history-row">
+                <td colspan="5" class="empty-cell">No benchmarks recorded yet. Click "Build Index".</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
