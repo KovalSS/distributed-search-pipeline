@@ -12,10 +12,6 @@ const topInput = document.getElementById('top-input');
 const searchBtn = document.getElementById('search-btn');
 const statusLine = document.getElementById('status-line');
 
-const stepExpansion = document.getElementById('step-expansion');
-const stepSearch = document.getElementById('step-search');
-const stepDone = document.getElementById('step-done');
-
 const expansionSection = document.getElementById('expansion-section');
 const expansionChips = document.getElementById('expansion-chips');
 const resultsSection = document.getElementById('results-section');
@@ -84,23 +80,23 @@ async function checkSystemHealth() {
     if (res.ok) {
       const data = await res.json();
       badgeServer.textContent = 'Server: Online';
-      badgeServer.className = 'badge online';
+      badgeServer.className = 'status-item online';
 
       if (data.ollama) {
         badgeOllama.textContent = 'Ollama: Ready';
-        badgeOllama.className = 'badge online';
+        badgeOllama.className = 'status-item online';
       } else {
         badgeOllama.textContent = 'Ollama: Offline';
-        badgeOllama.className = 'badge offline';
+        badgeOllama.className = 'status-item offline';
       }
     } else {
       throw new Error();
     }
   } catch {
     badgeServer.textContent = 'Server: Offline';
-    badgeServer.className = 'badge offline';
+    badgeServer.className = 'status-item offline';
     badgeOllama.textContent = 'Ollama: Unknown';
-    badgeOllama.className = 'badge offline';
+    badgeOllama.className = 'status-item offline';
   }
 
   try {
@@ -111,25 +107,21 @@ async function checkSystemHealth() {
 
       if (currentDocuments > 0) {
         badgeIndex.textContent = `Index: ${currentDocuments.toLocaleString()} docs`;
-        badgeIndex.className = 'badge online';
+        badgeIndex.className = 'status-item online';
         noIndexAlert.hidden = true;
       } else {
         badgeIndex.textContent = 'Index: 0 docs';
-        badgeIndex.className = 'badge offline';
+        badgeIndex.className = 'status-item offline';
         noIndexAlert.hidden = false;
       }
     }
   } catch {
     badgeIndex.textContent = 'Index: Error';
-    badgeIndex.className = 'badge offline';
+    badgeIndex.className = 'status-item offline';
   }
 }
 
 function resetSearchUi() {
-  [stepExpansion, stepSearch, stepDone].forEach(step => {
-    step.classList.remove('active', 'done', 'error');
-  });
-
   statusLine.textContent = '';
   statusLine.classList.remove('error');
 
@@ -140,19 +132,9 @@ function resetSearchUi() {
   resultsList.innerHTML = '';
 }
 
-function setStepState(stepElement, state) {
-  stepElement.classList.remove('active', 'done', 'error');
-  if (state) stepElement.classList.add(state);
-}
-
 function showSearchError(message) {
   statusLine.textContent = message;
   statusLine.classList.add('error');
-
-  if (!stepExpansion.classList.contains('done')) setStepState(stepExpansion, 'error');
-  if (!stepSearch.classList.contains('done')) setStepState(stepSearch, 'error');
-  if (!stepDone.classList.contains('done')) setStepState(stepDone, 'error');
-
   searchBtn.disabled = false;
 }
 
@@ -162,17 +144,17 @@ function displayExpansion(data) {
 
   expansionChips.innerHTML = '';
   terms.forEach(term => {
-    const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.textContent = term;
-    expansionChips.appendChild(chip);
+    const tag = document.createElement('span');
+    tag.className = 'expansion-tag';
+    tag.textContent = term;
+    expansionChips.appendChild(tag);
   });
 
   expansionSection.hidden = false;
 }
 
 function openDocumentModal(docId, rawData) {
-  modalDocId.textContent = `doc_id: ${docId}`;
+  modalDocId.textContent = `ID: ${docId}`;
   currentModalJson = typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2);
   modalJsonCode.textContent = currentModalJson;
   modalCopyStatus.hidden = true;
@@ -238,29 +220,24 @@ function displayResults(data) {
     title.className = 'result-title';
     title.textContent = titleText;
 
-    const id = document.createElement('div');
-    id.className = 'result-id';
-    id.textContent = `doc_id: ${docIdText}`;
+    const meta = document.createElement('div');
+    meta.className = 'result-meta';
+    meta.textContent = `ID: ${docIdText} • Score: ${Number(item.score).toFixed(1)}`;
 
     info.appendChild(title);
-    info.appendChild(id);
+    info.appendChild(meta);
 
     const actions = document.createElement('div');
     actions.className = 'result-actions';
 
-    const score = document.createElement('div');
-    score.className = 'result-score';
-    score.textContent = `Score: ${Number(item.score).toFixed(1)}`;
-
     const viewBtn = document.createElement('button');
     viewBtn.type = 'button';
     viewBtn.className = 'btn-view';
-    viewBtn.textContent = 'View';
+    viewBtn.textContent = 'View JSON';
     viewBtn.addEventListener('click', () => {
       openDocumentModal(docIdText, item.raw || { doc_id: item.doc_id, title: titleText, score: item.score });
     });
 
-    actions.appendChild(score);
     actions.appendChild(viewBtn);
 
     card.appendChild(info);
@@ -275,25 +252,24 @@ function performSearch(query, top) {
   resetSearchUi();
 
   if (currentDocuments === 0) {
-    showSearchError("Warning: Index has not been built yet (0 documents). Go to the \"Indexing & Benchmarks\" tab.");
+    showSearchError("Index is empty (0 documents). Go to the \"Indexing & Benchmarks\" tab to build it.");
     return;
   }
 
   searchBtn.disabled = true;
-  statusLine.textContent = 'Connecting to server...';
+  statusLine.textContent = 'Connecting...';
 
   const wsUrl = getWebSocketUrl();
 
   try {
     websocket = new WebSocket(wsUrl);
   } catch (err) {
-    showSearchError('Failed to initialize WebSocket: ' + err.message);
+    showSearchError('WebSocket initialization failed: ' + err.message);
     return;
   }
 
   websocket.onopen = () => {
-    statusLine.textContent = 'Searching...';
-    setStepState(stepExpansion, 'active');
+    statusLine.textContent = 'Expanding query with Ollama...';
     websocket.send(JSON.stringify({ query: query, top: top }));
   };
 
@@ -302,40 +278,36 @@ function performSearch(query, top) {
     try {
       payload = JSON.parse(event.data);
     } catch {
-      showSearchError('Server returned invalid JSON.');
+      showSearchError('Invalid JSON from server.');
       return;
     }
 
     if (payload.stage === 'error') {
-      showSearchError(payload.message || 'Server search error');
+      showSearchError(payload.message || 'Search error');
       websocket.close();
       return;
     }
 
     if (payload.stage === 'query_expansion') {
-      setStepState(stepExpansion, 'done');
-      setStepState(stepSearch, 'active');
+      statusLine.textContent = 'Searching index...';
       displayExpansion(payload.data);
     } else if (payload.stage === 'keyword_search') {
-      setStepState(stepSearch, 'done');
-      setStepState(stepDone, 'active');
       displayResults(payload.data);
     } else if (payload.stage === 'done') {
-      setStepState(stepDone, 'done');
-      statusLine.textContent = 'Done';
+      statusLine.textContent = '';
       searchBtn.disabled = false;
       websocket.close();
     }
   };
 
   websocket.onerror = () => {
-    showSearchError(`Connection error to server (${wsUrl}).`);
+    showSearchError(`Connection error (${wsUrl}).`);
   };
 
   websocket.onclose = (event) => {
     searchBtn.disabled = false;
     if (event.code !== 1000 && !statusLine.classList.contains('error')) {
-      showSearchError(`Connection closed (code: ${event.code})`);
+      showSearchError(`Connection closed (${event.code})`);
     }
   };
 }
@@ -367,7 +339,7 @@ indexForm.addEventListener('submit', async (e) => {
   const startTime = Date.now();
   const timerInterval = setInterval(() => {
     const elapsedSec = ((Date.now() - startTime) / 1000).toFixed(1);
-    indexProgressText.textContent = `Indexing dataset with ${threads} threads... Elapsed: ${elapsedSec} s`;
+    indexProgressText.textContent = `Indexing with ${threads} threads... ${elapsedSec} s`;
   }, 100);
 
   try {
@@ -390,7 +362,7 @@ indexForm.addEventListener('submit', async (e) => {
     const timeSec = (timeMs / 1000).toFixed(2);
     const docs = data.documents_indexed || 0;
 
-    indexResultAlert.textContent = `Successfully indexed ${docs.toLocaleString()} documents in ${timeMs} ms (${timeSec} s) using ${threads} threads!`;
+    indexResultAlert.textContent = `Indexed ${docs.toLocaleString()} documents in ${timeMs} ms (${timeSec} s) using ${threads} threads.`;
     indexResultAlert.hidden = false;
 
     if (noHistoryRow && noHistoryRow.parentNode) {

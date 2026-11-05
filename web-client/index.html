@@ -9,20 +9,16 @@
 <body>
   <div class="container">
     <header class="header">
-      <div class="header-top">
-        <div>
-          <h1>Distributed Search Engine</h1>
-          <p class="subtitle">Full-text inverted index with Ollama (LLM) and WebSocket</p>
-        </div>
+      <div class="header-main">
         <div class="system-status">
-          <span class="badge" id="badge-server">Server: ...</span>
-          <span class="badge" id="badge-ollama">Ollama: ...</span>
-          <span class="badge" id="badge-index">Index: ...</span>
+          <span id="badge-server" class="status-item">Server: ...</span>
+          <span id="badge-ollama" class="status-item">Ollama: ...</span>
+          <span id="badge-index" class="status-item">Index: ...</span>
         </div>
       </div>
 
       <div id="no-index-alert" class="alert-warning" hidden>
-        Warning: Index has not been built in memory yet (0 documents). Go to the "Indexing &amp; Benchmarks" tab to run indexing.
+        Index is empty (0 documents). Go to the "Indexing &amp; Benchmarks" tab to build it.
       </div>
 
       <nav class="tabs-nav">
@@ -34,50 +30,36 @@
     <main>
       <section id="tab-search" class="tab-content active">
         <form id="search-form" class="search-form">
-          <input type="text" id="query-input" placeholder="Enter query in English (e.g., candle lighter, coffee maker...)" autocomplete="off" required />
-          <input type="number" id="top-input" min="1" max="50" value="5" title="Top N" />
+          <input type="text" id="query-input" placeholder="Search products (e.g. candle lighter, coffee maker...)" autocomplete="off" required />
+          <div class="top-selector">
+            <label for="top-input">Top:</label>
+            <input type="number" id="top-input" min="1" max="50" value="5" />
+          </div>
           <button type="submit" id="search-btn">Search</button>
         </form>
 
-        <div class="pipeline-container">
-          <div class="step" id="step-expansion">
-            <span class="step-num">1</span>
-            <span class="step-label">Query Expansion</span>
-          </div>
-          <div class="step-arrow">➔</div>
-          <div class="step" id="step-search">
-            <span class="step-num">2</span>
-            <span class="step-label">Keyword Search</span>
-          </div>
-          <div class="step-arrow">➔</div>
-          <div class="step" id="step-done">
-            <span class="step-num">3</span>
-            <span class="step-label">Done</span>
-          </div>
-        </div>
-
         <div id="status-line" class="status-line"></div>
 
-        <section id="expansion-section" class="card-section" hidden>
-          <h3>Generated Synonyms (Ollama LLM):</h3>
-          <div id="expansion-chips" class="chips-container"></div>
-        </section>
+        <div id="expansion-section" class="expansion-box" hidden>
+          <span class="expansion-title">Synonyms:</span>
+          <span id="expansion-chips" class="expansion-tags"></span>
+        </div>
 
-        <section id="results-section" class="card-section" hidden>
-          <h3 id="results-heading">Results:</h3>
+        <section id="results-section" class="results-container" hidden>
+          <h3 id="results-heading">Search Results</h3>
           <div id="results-list" class="results-list"></div>
         </section>
       </section>
 
       <section id="tab-index" class="tab-content">
-        <div class="index-card">
-          <h2>Inverted Index Build Management</h2>
-          <p class="card-desc">Specify worker thread count for custom ThreadPool and build the dataset index.</p>
+        <div class="panel">
+          <h2>Index Management</h2>
+          <p class="panel-desc">Build in-memory inverted index using custom thread pool.</p>
 
           <form id="index-form" class="index-form">
-            <div class="input-group">
+            <div class="form-row">
               <label for="threads-input">Worker threads count:</label>
-              <div class="threads-selector">
+              <div class="threads-picker">
                 <input type="number" id="threads-input" min="1" max="32" value="8" required />
                 <div class="quick-threads">
                   <button type="button" class="btn-chip" data-threads="1">1</button>
@@ -94,15 +76,15 @@
           </form>
 
           <div id="index-progress" class="index-progress" hidden>
-            <div class="spinner"></div>
+            <span class="spinner"></span>
             <span id="index-progress-text">Indexing in progress... Time: 0.0 s</span>
           </div>
 
           <div id="index-result-alert" class="alert-success" hidden></div>
         </div>
 
-        <div class="history-card">
-          <h3>Index Build Benchmark History</h3>
+        <div class="panel">
+          <h3>Benchmark History</h3>
           <table class="benchmark-table">
             <thead>
               <tr>
@@ -130,15 +112,15 @@
         <h3 class="modal-title">Raw Product Data</h3>
         <button type="button" id="modal-close-btn" class="modal-close" aria-label="Close">&times;</button>
       </div>
-      <div class="modal-actions-bar">
-        <span id="modal-doc-id" class="doc-badge"></span>
-        <div class="actions-right">
+      <div class="modal-toolbar">
+        <span id="modal-doc-id" class="modal-doc-id"></span>
+        <div class="toolbar-actions">
           <span id="modal-copy-status" class="copy-status" hidden>Copied!</span>
           <button type="button" id="modal-copy-btn" class="btn-copy">Copy JSON</button>
         </div>
       </div>
       <div class="modal-body">
-        <pre class="json-viewer"><code id="modal-json-code"></code></pre>
+        <pre class="json-code"><code id="modal-json-code"></code></pre>
       </div>
     </div>
   </div>
