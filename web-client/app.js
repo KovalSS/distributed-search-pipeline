@@ -24,7 +24,6 @@ const buildIndexBtn = document.getElementById('build-index-btn');
 const indexProgress = document.getElementById('index-progress');
 const indexProgressText = document.getElementById('index-progress-text');
 const indexResultAlert = document.getElementById('index-result-alert');
-const quickThreadBtns = document.querySelectorAll('.btn-chip');
 const benchmarkTbody = document.getElementById('benchmark-tbody');
 const noHistoryRow = document.getElementById('no-history-row');
 
@@ -63,12 +62,6 @@ tabBtns.forEach(btn => {
     btn.classList.add('active');
     const target = document.getElementById(btn.dataset.tab);
     if (target) target.classList.add('active');
-  });
-});
-
-quickThreadBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    threadsInput.value = btn.dataset.threads;
   });
 });
 
