@@ -67,11 +67,11 @@ public class OllamaClient {
         }
     }
 
-    private List<String> parseTerms(String rawResponse) {
+    List<String> parseTerms(String rawResponse) {
         List<String> terms = new ArrayList<>();
         String text = rawResponse.replace("\n", ",");
         int colonIdx = text.indexOf(':');
-        if (colonIdx != -1 && colonIdx < text.length() / 2) {
+        if (colonIdx != -1 && (text.indexOf(',') == -1 || colonIdx < text.indexOf(','))) {
             text = text.substring(colonIdx + 1);
         }
 
