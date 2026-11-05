@@ -31,3 +31,18 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Python ###
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+### Benchmark & Test Results ###
+benchmarks/results/
+docs/benchmarks/
