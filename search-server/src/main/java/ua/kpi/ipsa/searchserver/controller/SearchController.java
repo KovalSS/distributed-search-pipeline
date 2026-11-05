@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import tools.jackson.databind.ObjectMapper;
+
 import ua.kpi.ipsa.searchserver.dto.SearchRequest;
 import ua.kpi.ipsa.searchserver.dto.SearchResponse;
 import ua.kpi.ipsa.searchserver.index.SearchService;
@@ -17,6 +19,7 @@ import ua.kpi.ipsa.searchserver.index.SearchService;
 public class SearchController {
 
     private final SearchService searchService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SearchController(SearchService searchService) {
         this.searchService = searchService;
@@ -34,7 +37,15 @@ public class SearchController {
 
         List<SearchResponse.SearchResult> results = new ArrayList<>();
         for (SearchService.ScoredDoc doc : scored) {
-            results.add(new SearchResponse.SearchResult(doc.docId(), doc.score(), doc.title()));
+            String rawJson = searchService.getDocumentJson(doc.docId());
+            Object rawObj = null;
+            if (rawJson != null) {
+                try {
+                    rawObj = objectMapper.readTree(rawJson);
+                } catch (Exception ignored) {
+                }
+            }
+            results.add(new SearchResponse.SearchResult(doc.docId(), doc.score(), doc.title(), rawObj));
         }
 
         long elapsed = System.currentTimeMillis() - start;

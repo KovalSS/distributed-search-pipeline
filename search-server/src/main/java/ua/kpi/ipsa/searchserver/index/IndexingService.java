@@ -4,7 +4,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -23,8 +26,13 @@ public class IndexingService {
     @Value("${search.dataset.path}")
     private String datasetPath;
 
+    public record DocLocation(short fileIndex, int lineIndex) {
+    }
+
     private volatile InvertedIndex index = new InvertedIndex();
     private volatile ConcurrentHashMap<String, String> docTitles = new ConcurrentHashMap<>();
+    private volatile ConcurrentHashMap<String, DocLocation> docLocations = new ConcurrentHashMap<>();
+    private volatile List<Path> datasetFiles = new ArrayList<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private volatile int documentsIndexed = 0;
@@ -34,12 +42,20 @@ public class IndexingService {
     public synchronized IndexResult buildIndex(int threadCount) {
         this.index = new InvertedIndex();
         this.docTitles = new ConcurrentHashMap<>();
+        this.docLocations = new ConcurrentHashMap<>();
+        this.datasetFiles = new ArrayList<>();
         System.gc();
 
         InvertedIndex newIndex = new InvertedIndex();
         ConcurrentHashMap<String, String> newTitles = new ConcurrentHashMap<>();
+        ConcurrentHashMap<String, DocLocation> newLocations = new ConcurrentHashMap<>();
 
         List<Path> files = listDatasetFiles();
+        Map<Path, Short> fileIndexMap = new HashMap<>();
+        for (short i = 0; i < files.size(); i++) {
+            fileIndexMap.put(files.get(i), i);
+        }
+
         ThreadPool pool = new ThreadPool(threadCount);
         AtomicInteger indexedCounter = new AtomicInteger(0);
 
@@ -48,7 +64,7 @@ public class IndexingService {
         long start = System.currentTimeMillis();
 
         for (List<Path> chunk : chunks) {
-            pool.submit(() -> indexChunk(chunk, newIndex, newTitles, indexedCounter));
+            pool.submit(() -> indexChunk(chunk, fileIndexMap, newIndex, newTitles, newLocations, indexedCounter));
         }
 
         pool.awaitCompletion();
@@ -58,6 +74,8 @@ public class IndexingService {
 
         index = newIndex;
         docTitles = newTitles;
+        docLocations = newLocations;
+        datasetFiles = files;
         documentsIndexed = indexedCounter.get();
         lastBuildTimeMs = elapsed;
         lastThreadsUsed = threadCount;
@@ -65,13 +83,17 @@ public class IndexingService {
         return new IndexResult(documentsIndexed, elapsed);
     }
 
-    private void indexChunk(List<Path> chunk, InvertedIndex targetIndex,
-            ConcurrentHashMap<String, String> targetTitles, AtomicInteger counter) {
+    private void indexChunk(List<Path> chunk, Map<Path, Short> fileIndexMap, InvertedIndex targetIndex,
+            ConcurrentHashMap<String, String> targetTitles,
+            ConcurrentHashMap<String, DocLocation> targetLocations, AtomicInteger counter) {
         for (Path file : chunk) {
+            short fileIdx = fileIndexMap.getOrDefault(file, (short) 0);
             try (BufferedReader reader = Files.newBufferedReader(file)) {
                 String line;
+                int lineIdx = 0;
                 while ((line = reader.readLine()) != null) {
                     if (line.isBlank()) {
+                        lineIdx++;
                         continue;
                     }
                     try {
@@ -84,11 +106,13 @@ public class IndexingService {
                             if (product.title() != null) {
                                 targetTitles.put(docId, product.title());
                             }
+                            targetLocations.put(docId, new DocLocation(fileIdx, lineIdx));
                             counter.incrementAndGet();
                         }
                     } catch (Exception e) {
                         System.err.println("Failed to parse line in " + file + ": " + e.getMessage());
                     }
+                    lineIdx++;
                 }
             } catch (IOException e) {
                 System.err.println("Failed to read file: " + file + " — " + e.getMessage());
@@ -140,6 +164,22 @@ public class IndexingService {
 
     public String getTitle(String docId) {
         return docTitles.getOrDefault(docId, "");
+    }
+
+    public String getRawDocumentJson(String docId) {
+        if (docId == null || docLocations == null || datasetFiles == null) {
+            return null;
+        }
+        DocLocation loc = docLocations.get(docId);
+        if (loc == null || loc.fileIndex() < 0 || loc.fileIndex() >= datasetFiles.size()) {
+            return null;
+        }
+        Path file = datasetFiles.get(loc.fileIndex());
+        try (Stream<String> lines = Files.lines(file)) {
+            return lines.skip(loc.lineIndex()).findFirst().orElse(null);
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     public int getDocumentsIndexed() {

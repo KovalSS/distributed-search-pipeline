@@ -59,4 +59,8 @@ public class SearchService {
 
     public record ScoredDoc(String docId, double score, String title) {
     }
+
+    public String getDocumentJson(String docId) {
+        return indexingService.getRawDocumentJson(docId);
+    }
 }

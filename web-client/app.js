@@ -32,9 +32,17 @@ const quickThreadBtns = document.querySelectorAll('.btn-chip');
 const benchmarkTbody = document.getElementById('benchmark-tbody');
 const noHistoryRow = document.getElementById('no-history-row');
 
+const documentModal = document.getElementById('document-modal');
+const modalCloseBtn = document.getElementById('modal-close-btn');
+const modalDocId = document.getElementById('modal-doc-id');
+const modalCopyBtn = document.getElementById('modal-copy-btn');
+const modalCopyStatus = document.getElementById('modal-copy-status');
+const modalJsonCode = document.getElementById('modal-json-code');
+
 let currentDocuments = 0;
 let websocket = null;
 let benchmarkCounter = 0;
+let currentModalJson = '';
 
 function getBaseHttpUrl() {
   if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
@@ -163,6 +171,43 @@ function displayExpansion(data) {
   expansionSection.hidden = false;
 }
 
+function openDocumentModal(docId, rawData) {
+  modalDocId.textContent = `doc_id: ${docId}`;
+  currentModalJson = typeof rawData === 'string' ? rawData : JSON.stringify(rawData, null, 2);
+  modalJsonCode.textContent = currentModalJson;
+  modalCopyStatus.hidden = true;
+  documentModal.hidden = false;
+}
+
+function closeDocumentModal() {
+  documentModal.hidden = true;
+  currentModalJson = '';
+}
+
+modalCloseBtn.addEventListener('click', closeDocumentModal);
+
+documentModal.addEventListener('click', (e) => {
+  if (e.target === documentModal) {
+    closeDocumentModal();
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !documentModal.hidden) {
+    closeDocumentModal();
+  }
+});
+
+modalCopyBtn.addEventListener('click', () => {
+  if (!currentModalJson) return;
+  navigator.clipboard.writeText(currentModalJson).then(() => {
+    modalCopyStatus.hidden = false;
+    setTimeout(() => {
+      modalCopyStatus.hidden = true;
+    }, 2000);
+  });
+});
+
 function displayResults(data) {
   const results = data.results || [];
   const timeMs = data.time_ms || 0;
@@ -186,23 +231,40 @@ function displayResults(data) {
     const info = document.createElement('div');
     info.className = 'result-info';
 
+    const titleText = (item.raw && item.raw.title) || item.snippet || '(No product title)';
+    const docIdText = (item.raw && (item.raw.parent_asin || item.raw.asin)) || item.doc_id;
+
     const title = document.createElement('div');
     title.className = 'result-title';
-    title.textContent = item.snippet && item.snippet.trim() ? item.snippet : '(No product title)';
+    title.textContent = titleText;
 
     const id = document.createElement('div');
     id.className = 'result-id';
-    id.textContent = `doc_id: ${item.doc_id}`;
+    id.textContent = `doc_id: ${docIdText}`;
 
     info.appendChild(title);
     info.appendChild(id);
+
+    const actions = document.createElement('div');
+    actions.className = 'result-actions';
 
     const score = document.createElement('div');
     score.className = 'result-score';
     score.textContent = `Score: ${Number(item.score).toFixed(1)}`;
 
+    const viewBtn = document.createElement('button');
+    viewBtn.type = 'button';
+    viewBtn.className = 'btn-view';
+    viewBtn.textContent = 'View';
+    viewBtn.addEventListener('click', () => {
+      openDocumentModal(docIdText, item.raw || { doc_id: item.doc_id, title: titleText, score: item.score });
+    });
+
+    actions.appendChild(score);
+    actions.appendChild(viewBtn);
+
     card.appendChild(info);
-    card.appendChild(score);
+    card.appendChild(actions);
     resultsList.appendChild(card);
   });
 

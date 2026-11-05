@@ -124,6 +124,25 @@
     </main>
   </div>
 
+  <div id="document-modal" class="modal-backdrop" hidden>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 class="modal-title">Raw Product Data</h3>
+        <button type="button" id="modal-close-btn" class="modal-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-actions-bar">
+        <span id="modal-doc-id" class="doc-badge"></span>
+        <div class="actions-right">
+          <span id="modal-copy-status" class="copy-status" hidden>Copied!</span>
+          <button type="button" id="modal-copy-btn" class="btn-copy">Copy JSON</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <pre class="json-viewer"><code id="modal-json-code"></code></pre>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

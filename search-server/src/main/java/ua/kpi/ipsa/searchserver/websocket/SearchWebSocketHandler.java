@@ -47,7 +47,17 @@ public class SearchWebSocketHandler extends TextWebSocketHandler {
         long elapsed = System.currentTimeMillis() - start;
 
         List<ResultItem> resultItems = results.stream()
-                .map(doc -> new ResultItem(doc.docId(), doc.score(), doc.title()))
+                .map(doc -> {
+                    String rawJson = searchService.getDocumentJson(doc.docId());
+                    Object rawObj = null;
+                    if (rawJson != null) {
+                        try {
+                            rawObj = objectMapper.readTree(rawJson);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    return new ResultItem(doc.docId(), doc.score(), doc.title(), rawObj);
+                })
                 .toList();
         sendJson(session, new StageMessage("keyword_search",
                 new KeywordSearchData(resultItems, elapsed)));
@@ -74,7 +84,11 @@ public class SearchWebSocketHandler extends TextWebSocketHandler {
             @JsonProperty("expanded_terms") List<String> expandedTerms) {
     }
 
-    private record ResultItem(@JsonProperty("doc_id") String docId, double score, String snippet) {
+    private record ResultItem(
+            @JsonProperty("doc_id") String docId,
+            double score,
+            String snippet,
+            Object raw) {
     }
 
     private record KeywordSearchData(

@@ -8,7 +8,8 @@ public record SearchResponse(List<SearchResult> results, @JsonProperty("time_ms"
     public record SearchResult(
             @JsonProperty("doc_id") String docId,
             double score,
-            String snippet
+            String snippet,
+            Object raw
     ) {
     }
 }
