@@ -46,3 +46,7 @@ __pycache__/
 ### Benchmark & Test Results ###
 benchmarks/results/
 docs/benchmarks/
+
+### Dataset files ###
+data/
+
