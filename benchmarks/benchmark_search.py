@@ -16,21 +16,21 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 SAMPLE_QUERIES = [
-    "wireless mouse",
-    "gaming laptop",
-    "mechanical keyboard",
-    "bluetooth headphones",
-    "usb c hub",
-    "hdmi cable",
-    "fast charger",
-    "external ssd",
-    "laptop stand",
-    "protective case",
-    "ergonomic chair",
-    "screen protector",
-    "portable monitor",
-    "wireless earbuds",
-    "power bank"
+    "scented candle",
+    "essential oil",
+    "laundry detergent",
+    "aromatherapy diffuser",
+    "hand soap",
+    "organic shampoo",
+    "air freshener",
+    "massage oil",
+    "soy candle",
+    "paper towels",
+    "cleaning spray",
+    "vitamins supplement",
+    "bath salts",
+    "body wash",
+    "herbal tea"
 ]
 
 def check_server(base_url):
@@ -44,11 +44,12 @@ def check_server(base_url):
     except Exception as exc:
         return False, str(exc)
 
-def run_load_step(search_url, concurrency, duration_sec, warmup_sec):
+def run_load_step(search_url, concurrency, duration_sec, warmup_sec, mode="keyword"):
     stop_event = Event()
     latencies = []
     success_count = 0
     failure_count = 0
+    req_timeout = 15 if mode == "expanded" else 5
 
     def worker():
         nonlocal success_count, failure_count
@@ -58,10 +59,10 @@ def run_load_step(search_url, concurrency, duration_sec, warmup_sec):
 
         while not stop_event.is_set():
             query = random.choice(SAMPLE_QUERIES)
-            payload = {"query": query, "top": 5}
+            payload = {"query": query, "mode": mode, "top": 5}
             t0 = time.perf_counter()
             try:
-                resp = session.post(search_url, json=payload, timeout=5)
+                resp = session.post(search_url, json=payload, timeout=req_timeout)
                 t1 = time.perf_counter()
                 if resp.status_code == 200:
                     latencies.append((t1 - t0) * 1000.0)
@@ -77,7 +78,7 @@ def run_load_step(search_url, concurrency, duration_sec, warmup_sec):
             s = requests.Session()
             while not warmup_stop.is_set():
                 try:
-                    s.post(search_url, json={"query": "test", "top": 5}, timeout=3)
+                    s.post(search_url, json={"query": "candle", "mode": mode, "top": 5}, timeout=req_timeout)
                 except Exception:
                     pass
         with ThreadPoolExecutor(max_workers=min(concurrency, 4)) as pool:
@@ -213,9 +214,13 @@ def main():
                         help="List of concurrent client levels")
     parser.add_argument("--duration", type=int, default=10, help="Test duration per level (seconds)")
     parser.add_argument("--warmup", type=int, default=2, help="Warmup duration (seconds)")
+    parser.add_argument("--mode", "-m", choices=["keyword", "expanded"], default="keyword",
+                        help="Search mode: 'keyword' (fast direct index lookup) or 'expanded' (AI Query Expansion via Ollama)")
     parser.add_argument("--output-csv", default="benchmarks/results/search_scalability.csv", help="CSV output path")
     parser.add_argument("--output-plot", default="docs/benchmarks/search_throughput.png", help="Plot PNG output path")
     args = parser.parse_args()
+
+    mode = args.mode.lower()
 
     api_base = args.url.rsplit("/", 1)[0]
     ok, info = check_server(api_base)
@@ -229,14 +234,14 @@ def main():
         print("[WARN] Index is empty! Search results may not reflect realistic load.")
 
     print(f"[INFO] Starting load test on {args.url}")
-    print(f"[INFO] Levels: {args.clients} | Duration per step: {args.duration}s | Warmup: {args.warmup}s")
+    print(f"[INFO] Mode: {mode.upper()} | Levels: {args.clients} | Duration per step: {args.duration}s | Warmup: {args.warmup}s")
     print("-" * 85)
     print(f"{'Clients':>8} | {'Requests':>10} | {'RPS':>10} | {'Avg Lat':>10} | {'P50':>8} | {'P95':>8} | {'P99':>8} | {'Errors':>7}")
     print("-" * 85)
 
     results = []
     for c in args.clients:
-        res = run_load_step(args.url, c, args.duration, args.warmup)
+        res = run_load_step(args.url, c, args.duration, args.warmup, mode=mode)
         results.append(res)
         print(f"{res['clients']:>8} | {res['total_requests']:>10} | {res['rps']:>10.1f} | "
               f"{res['avg_lat_ms']:>8.2f}ms | {res['p50_lat_ms']:>6.2f}ms | {res['p95_lat_ms']:>6.2f}ms | "
