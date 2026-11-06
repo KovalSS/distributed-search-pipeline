@@ -20,8 +20,8 @@ def check_index_status(stats_url: str) -> tuple[bool, int]:
         return False, 0
 
 
-def run_search(server_url: str, query: str, top: int) -> dict:
-    payload = json.dumps({"query": query, "mode": "keyword", "top": top}).encode("utf-8")
+def run_search(server_url: str, query: str, mode: str, top: int) -> dict:
+    payload = json.dumps({"query": query, "mode": mode, "top": top}).encode("utf-8")
     request = urllib.request.Request(
         server_url,
         data=payload,
@@ -32,13 +32,16 @@ def run_search(server_url: str, query: str, top: int) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
-def print_results(data: dict, query: str) -> None:
+def print_results(data: dict, query: str, mode: str, show_raw: bool = False) -> None:
     results = data.get("results", [])
     time_ms = data.get("time_ms", "?")
+    synonyms = data.get("synonyms")
 
     print("\n" + "-" * 60)
     print(f"Search results for: \"{query}\"")
-    print(f"Found: {len(results)} | Response time: {time_ms} ms")
+    print(f"Found: {len(results)} | Response time: {time_ms} ms | Mode: {mode.upper()}")
+    if synonyms:
+        print(f"Synonyms (Ollama): {', '.join(synonyms)}")
     print("-" * 60)
 
     if not results:
@@ -50,13 +53,20 @@ def print_results(data: dict, query: str) -> None:
         score = item.get("score", 0.0)
         doc_id = item.get("doc_id", "?")
         print(f"{i:>2}. [{score:>5.1f}] {title}")
-        print(f"     Document ID: {doc_id}\n")
+        print(f"     Document ID: {doc_id}")
+
+        if show_raw and item.get("raw"):
+            raw_str = json.dumps(item["raw"], indent=2, ensure_ascii=False)
+            print("     Raw Document Data:")
+            for line in raw_str.splitlines():
+                print(f"       {line}")
+        print()
 
 
-def execute_single_search(url: str, query: str, top: int):
+def execute_single_search(url: str, query: str, mode: str, top: int, show_raw: bool = False):
     try:
-        data = run_search(url, query, top)
-        print_results(data, query)
+        data = run_search(url, query, mode, top)
+        print_results(data, query, mode, show_raw)
         return 0
     except urllib.error.URLError as e:
         print(f"[ERROR] Failed to connect to server ({url}): {e}", file=sys.stderr)
@@ -66,22 +76,44 @@ def execute_single_search(url: str, query: str, top: int):
         return 1
 
 
-def interactive_mode(url: str, top: int):
-    print("=" * 60)
-    print("           INTERACTIVE SEARCH MODE (CLI)")
-    print("  Enter search query and press Enter.")
-    print("  To exit, type 'q', 'exit' or press Ctrl+C.")
-    print("=" * 60 + "\n")
+def interactive_mode(url: str, mode: str, top: int, show_raw: bool = False):
+    current_mode = mode
+    current_show_raw = show_raw
+
+    print("=" * 65)
+    print("                INTERACTIVE SEARCH MODE (CLI)")
+    print(f"  Mode: {current_mode.upper()} | Show Raw Data: {'ON' if current_show_raw else 'OFF'}")
+    print("  Commands:")
+    print("    :keyword  / :kw   - switch to Keyword mode")
+    print("    :expanded / :exp  - switch to Expanded (AI) mode")
+    print("    :raw              - toggle raw data display (ON/OFF)")
+    print("    q / exit          - quit")
+    print("=" * 65 + "\n")
 
     while True:
         try:
-            query = input("Search > ").strip()
+            raw_indicator = "+raw" if current_show_raw else ""
+            prompt_mode = f"{current_mode}{raw_indicator}"
+            query = input(f"Search [{prompt_mode}] > ").strip()
             if not query:
                 continue
             if query.lower() in ("q", "quit", "exit"):
                 print("Exiting search.")
                 break
-            execute_single_search(url, query, top)
+            if query.lower() in (":keyword", ":kw"):
+                current_mode = "keyword"
+                print("Switched to mode: KEYWORD\n")
+                continue
+            if query.lower() in (":expanded", ":exp"):
+                current_mode = "expanded"
+                print("Switched to mode: EXPANDED\n")
+                continue
+            if query.lower() in (":raw", ":show_raw", ":show-raw"):
+                current_show_raw = not current_show_raw
+                print(f"Raw data display: {'ON' if current_show_raw else 'OFF'}\n")
+                continue
+
+            execute_single_search(url, query, current_mode, top, current_show_raw)
         except (KeyboardInterrupt, EOFError):
             print("\nExiting search.")
             break
@@ -102,6 +134,12 @@ def main() -> int:
         help="Search query (runs interactive mode if omitted)"
     )
     parser.add_argument(
+        "--mode", "-m",
+        choices=["keyword", "expanded"],
+        default="keyword",
+        help="Search mode: 'keyword' (pure fast index lookup) or 'expanded' (AI Query Expansion via Ollama)"
+    )
+    parser.add_argument(
         "--top", "-k",
         type=int,
         default=5,
@@ -117,8 +155,14 @@ def main() -> int:
         default=DEFAULT_STATS_URL,
         help=f"Stats endpoint URL (default: {DEFAULT_STATS_URL})"
     )
+    parser.add_argument(
+        "--show-raw", "--raw", "-r",
+        action="store_true",
+        help="Display full raw product document JSON for each search result"
+    )
 
     args = parser.parse_args()
+    effective_mode = args.mode.lower()
 
     server_ok, doc_count = check_index_status(args.stats_url)
     if not server_ok:
@@ -129,9 +173,9 @@ def main() -> int:
         print("  python cli-client/index.py --threads 8\n")
 
     if args.query:
-        return execute_single_search(args.url, args.query, args.top)
+        return execute_single_search(args.url, args.query, effective_mode, args.top, args.show_raw)
     else:
-        return interactive_mode(args.url, args.top)
+        return interactive_mode(args.url, effective_mode, args.top, args.show_raw)
 
 
 if __name__ == "__main__":
