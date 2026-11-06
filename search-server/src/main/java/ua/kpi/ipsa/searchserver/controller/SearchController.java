@@ -13,16 +13,19 @@ import tools.jackson.databind.ObjectMapper;
 import ua.kpi.ipsa.searchserver.dto.SearchRequest;
 import ua.kpi.ipsa.searchserver.dto.SearchResponse;
 import ua.kpi.ipsa.searchserver.index.SearchService;
+import ua.kpi.ipsa.searchserver.ollama.OllamaClient;
 
 @RestController
 @RequestMapping("/api")
 public class SearchController {
 
     private final SearchService searchService;
+    private final OllamaClient ollamaClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public SearchController(SearchService searchService) {
+    public SearchController(SearchService searchService, OllamaClient ollamaClient) {
         this.searchService = searchService;
+        this.ollamaClient = ollamaClient;
     }
 
     @PostMapping("/search")
@@ -32,8 +35,17 @@ public class SearchController {
         }
 
         long start = System.currentTimeMillis();
+        List<String> synonyms = null;
+        String queryToSearch = request.query();
 
-        List<SearchService.ScoredDoc> scored = searchService.keywordSearch(request.query(), request.top());
+        if ("expanded".equalsIgnoreCase(request.mode())) {
+            synonyms = ollamaClient.expandQuery(request.query());
+            if (synonyms != null && !synonyms.isEmpty()) {
+                queryToSearch = request.query() + " " + String.join(" ", synonyms);
+            }
+        }
+
+        List<SearchService.ScoredDoc> scored = searchService.keywordSearch(queryToSearch, request.top());
 
         List<SearchResponse.SearchResult> results = new ArrayList<>();
         for (SearchService.ScoredDoc doc : scored) {
@@ -49,6 +61,6 @@ public class SearchController {
         }
 
         long elapsed = System.currentTimeMillis() - start;
-        return new SearchResponse(results, elapsed);
+        return new SearchResponse(results, elapsed, synonyms);
     }
 }

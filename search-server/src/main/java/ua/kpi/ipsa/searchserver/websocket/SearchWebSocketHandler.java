@@ -2,8 +2,6 @@ package ua.kpi.ipsa.searchserver.websocket;
 
 import java.util.List;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -36,11 +34,17 @@ public class SearchWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        List<String> expandedTerms = ollamaClient.expandQuery(query);
-        sendJson(session, new StageMessage("query_expansion",
-                new QueryExpansionData(query, expandedTerms)));
+        String fullQuery = query;
+        boolean isKeywordOnly = "keyword".equalsIgnoreCase(incoming.mode());
 
-        String fullQuery = query + " " + String.join(" ", expandedTerms);
+        if (!isKeywordOnly) {
+            List<String> expandedTerms = ollamaClient.expandQuery(query);
+            sendJson(session, new StageMessage("query_expansion",
+                    new QueryExpansionData(query, expandedTerms)));
+            if (!expandedTerms.isEmpty()) {
+                fullQuery = query + " " + String.join(" ", expandedTerms);
+            }
+        }
 
         long start = System.currentTimeMillis();
         List<SearchService.ScoredDoc> results = searchService.keywordSearch(fullQuery, incoming.top());
@@ -70,32 +74,24 @@ public class SearchWebSocketHandler extends TextWebSocketHandler {
         session.sendMessage(new TextMessage(json));
     }
 
-    private record IncomingQuery(String query, Integer top) {
-    }
-
-    private record ErrorMessage(String stage, String message) {
+    private record IncomingQuery(String query, String mode, Integer top) {
     }
 
     private record StageMessage(String stage, Object data) {
     }
 
-    private record QueryExpansionData(
-            String original,
-            @JsonProperty("expanded_terms") List<String> expandedTerms) {
+    private record QueryExpansionData(String original, List<String> expanded_terms) {
     }
 
-    private record ResultItem(
-            @JsonProperty("doc_id") String docId,
-            double score,
-            String snippet,
-            Object raw) {
+    private record KeywordSearchData(List<ResultItem> results, long time_ms) {
     }
 
-    private record KeywordSearchData(
-            List<ResultItem> results,
-            @JsonProperty("time_ms") long timeMs) {
+    private record ResultItem(String doc_id, double score, String snippet, Object raw) {
     }
 
     private record DoneMessage(String stage) {
+    }
+
+    private record ErrorMessage(String stage, String message) {
     }
 }
