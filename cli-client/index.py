@@ -104,6 +104,9 @@ def run_single_build(base_url: str, threads: int, force: bool = False):
 
 
 def run_benchmark(base_url: str, thread_list: list[int], output_file: str = None):
+    if 1 not in thread_list:
+        print("[INFO] Thread 1 was automatically prepended to measure baseline execution time (T1) for Speedup calculation.")
+        thread_list = [1] + [t for t in thread_list if t != 1]
     print(f"Checking server availability ({base_url})...")
     try:
         get_health(base_url)
