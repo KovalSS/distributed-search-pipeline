@@ -48,5 +48,11 @@ benchmarks/results/
 docs/benchmarks/
 
 ### Dataset files ###
-data/
+data/*
+!data/raw/
+!data/batched/
+data/raw/*
+!data/raw/.gitkeep
+data/batched/*
+!data/batched/.gitkeep
 
