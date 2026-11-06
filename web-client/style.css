@@ -157,12 +157,29 @@ body {
   border-color: var(--primary);
 }
 
+.mode-selector,
 .top-selector {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 13px;
   color: var(--text-muted);
+}
+
+#mode-select {
+  padding: 9px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--text-main);
+  outline: none;
+  cursor: pointer;
+}
+
+#mode-select:focus {
+  border-color: var(--primary);
 }
 
 #top-input {

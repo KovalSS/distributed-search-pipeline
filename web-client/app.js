@@ -8,6 +8,7 @@ const tabContents = document.querySelectorAll('.tab-content');
 
 const searchForm = document.getElementById('search-form');
 const queryInput = document.getElementById('query-input');
+const modeSelect = document.getElementById('mode-select');
 const topInput = document.getElementById('top-input');
 const searchBtn = document.getElementById('search-btn');
 const statusLine = document.getElementById('status-line');
@@ -38,6 +39,7 @@ let currentDocuments = 0;
 let websocket = null;
 let benchmarkCounter = 0;
 let currentModalJson = '';
+let currentSearchMode = 'expanded';
 
 function getBaseHttpUrl() {
   if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
@@ -241,7 +243,8 @@ function displayResults(data) {
   resultsSection.hidden = false;
 }
 
-function performSearch(query, top) {
+function performSearch(query, top, mode = 'expanded') {
+  currentSearchMode = mode;
   resetSearchUi();
 
   if (currentDocuments === 0) {
@@ -262,8 +265,12 @@ function performSearch(query, top) {
   }
 
   websocket.onopen = () => {
-    statusLine.textContent = 'Expanding query with Ollama...';
-    websocket.send(JSON.stringify({ query: query, top: top }));
+    if (mode === 'keyword') {
+      statusLine.textContent = 'Searching index (Keyword mode)...';
+    } else {
+      statusLine.textContent = 'Expanding query with Ollama...';
+    }
+    websocket.send(JSON.stringify({ query: query, mode: mode, top: top }));
   };
 
   websocket.onmessage = (event) => {
@@ -282,8 +289,13 @@ function performSearch(query, top) {
     }
 
     if (payload.stage === 'query_expansion') {
-      statusLine.textContent = 'Searching index...';
-      displayExpansion(payload.data);
+      if (currentSearchMode === 'keyword') {
+        expansionSection.hidden = true;
+        expansionChips.innerHTML = '';
+      } else {
+        statusLine.textContent = 'Searching index...';
+        displayExpansion(payload.data);
+      }
     } else if (payload.stage === 'keyword_search') {
       displayResults(payload.data);
     } else if (payload.stage === 'done') {
@@ -311,12 +323,13 @@ searchForm.addEventListener('submit', (e) => {
   if (!query) return;
 
   const top = parseInt(topInput.value, 10) || 5;
+  const mode = modeSelect ? modeSelect.value : 'expanded';
 
   if (websocket && websocket.readyState === WebSocket.OPEN) {
     websocket.close();
   }
 
-  performSearch(query, top);
+  performSearch(query, top, mode);
 });
 
 indexForm.addEventListener('submit', async (e) => {

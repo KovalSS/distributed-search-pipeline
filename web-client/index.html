@@ -31,6 +31,13 @@
       <section id="tab-search" class="tab-content active">
         <form id="search-form" class="search-form">
           <input type="text" id="query-input" placeholder="Search products (e.g. candle lighter, coffee maker...)" autocomplete="off" required />
+          <div class="mode-selector">
+            <label for="mode-select">Mode:</label>
+            <select id="mode-select">
+              <option value="expanded" selected>Expanded (AI)</option>
+              <option value="keyword">Keyword</option>
+            </select>
+          </div>
           <div class="top-selector">
             <label for="top-input">Top:</label>
             <input type="number" id="top-input" min="1" max="50" value="5" />
