@@ -1,9 +1,11 @@
 package ua.kpi.ipsa.searchserver.index;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 
 import org.springframework.stereotype.Service;
 
@@ -43,17 +45,30 @@ public class SearchService {
             }
         }
 
-        List<ScoredDoc> results = new ArrayList<>();
+        if (scores.isEmpty()) {
+            return List.of();
+        }
+
+        PriorityQueue<Map.Entry<String, Double>> minHeap = new PriorityQueue<>(
+                Math.min(limit, scores.size()), Map.Entry.comparingByValue());
+
         for (Map.Entry<String, Double> entry : scores.entrySet()) {
+            if (minHeap.size() < limit) {
+                minHeap.offer(entry);
+            } else if (entry.getValue() > minHeap.peek().getValue()) {
+                minHeap.poll();
+                minHeap.offer(entry);
+            }
+        }
+
+        List<ScoredDoc> results = new ArrayList<>(minHeap.size());
+        while (!minHeap.isEmpty()) {
+            Map.Entry<String, Double> entry = minHeap.poll();
             String docId = entry.getKey();
             results.add(new ScoredDoc(docId, entry.getValue(), indexingService.getTitle(docId)));
         }
 
-        results.sort((a, b) -> Double.compare(b.score(), a.score()));
-
-        if (results.size() > limit) {
-            return results.subList(0, limit);
-        }
+        Collections.reverse(results);
         return results;
     }
 

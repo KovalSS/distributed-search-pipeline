@@ -26,7 +26,7 @@ public class IndexingService {
     @Value("${search.dataset.path}")
     private String datasetPath;
 
-    public record DocLocation(short fileIndex, int lineIndex) {
+    public record DocLocation(short fileIndex, long byteOffset, int length) {
     }
 
     private volatile InvertedIndex index = new InvertedIndex();
@@ -88,31 +88,55 @@ public class IndexingService {
             ConcurrentHashMap<String, DocLocation> targetLocations, AtomicInteger counter) {
         for (Path file : chunk) {
             short fileIdx = fileIndexMap.getOrDefault(file, (short) 0);
-            try (BufferedReader reader = Files.newBufferedReader(file)) {
-                String line;
-                int lineIdx = 0;
-                while ((line = reader.readLine()) != null) {
-                    if (line.isBlank()) {
-                        lineIdx++;
-                        continue;
-                    }
-                    try {
-                        ProductDocument product = objectMapper.readValue(line, ProductDocument.class);
-                        String docId = product.parent_asin();
-                        String text = buildIndexableText(product);
+            try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.READ)) {
+                java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(64 * 1024);
+                byte[] lineBuffer = new byte[8192];
+                int lineLen = 0;
+                long currentPos = 0;
+                long lineStartOffset = 0;
 
-                        if (docId != null && !text.isBlank()) {
-                            targetIndex.addDocument(docId, text);
-                            if (product.title() != null) {
-                                targetTitles.put(docId, product.title());
+                while (channel.read(buffer) > 0) {
+                    buffer.flip();
+                    while (buffer.hasRemaining()) {
+                        byte b = buffer.get();
+                        currentPos++;
+                        if (b == '\n') {
+                            int textLen = lineLen;
+                            if (textLen > 0 && lineBuffer[textLen - 1] == '\r') {
+                                textLen--;
                             }
-                            targetLocations.put(docId, new DocLocation(fileIdx, lineIdx));
-                            counter.incrementAndGet();
+                            if (textLen > 0) {
+                                String line = new String(lineBuffer, 0, textLen, java.nio.charset.StandardCharsets.UTF_8);
+                                if (!line.isBlank()) {
+                                    try {
+                                        ProductDocument product = objectMapper.readValue(line, ProductDocument.class);
+                                        String docId = product.parent_asin();
+                                        String text = buildIndexableText(product);
+
+                                        if (docId != null && !text.isBlank()) {
+                                            targetIndex.addDocument(docId, text);
+                                            if (product.title() != null) {
+                                                targetTitles.put(docId, product.title());
+                                            }
+                                            int lineLength = (int) (currentPos - lineStartOffset);
+                                            targetLocations.put(docId, new DocLocation(fileIdx, lineStartOffset, lineLength));
+                                            counter.incrementAndGet();
+                                        }
+                                    } catch (Exception e) {
+                                        System.err.println("Failed to parse line in " + file + ": " + e.getMessage());
+                                    }
+                                }
+                            }
+                            lineLen = 0;
+                            lineStartOffset = currentPos;
+                        } else {
+                            if (lineLen >= lineBuffer.length) {
+                                lineBuffer = java.util.Arrays.copyOf(lineBuffer, lineBuffer.length * 2);
+                            }
+                            lineBuffer[lineLen++] = b;
                         }
-                    } catch (Exception e) {
-                        System.err.println("Failed to parse line in " + file + ": " + e.getMessage());
                     }
-                    lineIdx++;
+                    buffer.clear();
                 }
             } catch (IOException e) {
                 System.err.println("Failed to read file: " + file + " — " + e.getMessage());
@@ -175,8 +199,12 @@ public class IndexingService {
             return null;
         }
         Path file = datasetFiles.get(loc.fileIndex());
-        try (Stream<String> lines = Files.lines(file)) {
-            return lines.skip(loc.lineIndex()).findFirst().orElse(null);
+        try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.READ)) {
+            java.nio.ByteBuffer dst = java.nio.ByteBuffer.allocate(loc.length());
+            channel.position(loc.byteOffset());
+            channel.read(dst);
+            dst.flip();
+            return java.nio.charset.StandardCharsets.UTF_8.decode(dst).toString().trim();
         } catch (IOException e) {
             return null;
         }
