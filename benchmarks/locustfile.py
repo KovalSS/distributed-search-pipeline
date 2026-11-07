@@ -13,7 +13,7 @@ def init_parser(parser):
         help="Search mode: 'keyword' (fast direct index lookup) or 'expanded' (AI Query Expansion via Ollama)"
     )
 
-SAMPLE_QUERIES = [
+DEFAULT_QUERIES = [
     "scented candle",
     "essential oil",
     "laundry detergent",
@@ -30,6 +30,20 @@ SAMPLE_QUERIES = [
     "body wash",
     "herbal tea"
 ]
+
+def load_queries():
+    queries_file = os.path.join(os.path.dirname(__file__), "queries.txt")
+    if os.path.isfile(queries_file):
+        try:
+            with open(queries_file, "r", encoding="utf-8") as f:
+                lines = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+                if lines:
+                    return lines
+        except Exception:
+            pass
+    return DEFAULT_QUERIES
+
+SAMPLE_QUERIES = load_queries()
 
 class SearchUser(HttpUser):
     host = "http://localhost:8080"

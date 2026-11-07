@@ -15,7 +15,7 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
-SAMPLE_QUERIES = [
+DEFAULT_SAMPLE_QUERIES = [
     "scented candle",
     "essential oil",
     "laundry detergent",
@@ -33,6 +33,26 @@ SAMPLE_QUERIES = [
     "herbal tea"
 ]
 
+def load_queries(custom_path=None):
+    candidates = []
+    if custom_path:
+        candidates.append(custom_path)
+    default_file = os.path.join(os.path.dirname(__file__), "queries.txt")
+    candidates.append(default_file)
+
+    for path in candidates:
+        if path and os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    lines = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+                    if lines:
+                        return lines, path
+            except Exception:
+                pass
+    return DEFAULT_SAMPLE_QUERIES, "built-in default list"
+
+SAMPLE_QUERIES, _ = load_queries()
+
 def check_server(base_url):
     try:
         health_resp = requests.get(f"{base_url}/health", timeout=3)
@@ -44,7 +64,9 @@ def check_server(base_url):
     except Exception as exc:
         return False, str(exc)
 
-def run_load_step(search_url, concurrency, duration_sec, warmup_sec, mode="keyword"):
+def run_load_step(search_url, concurrency, duration_sec, warmup_sec, mode="keyword", queries=None):
+    if not queries:
+        queries = SAMPLE_QUERIES
     stop_event = Event()
     latencies = []
     success_count = 0
@@ -58,7 +80,7 @@ def run_load_step(search_url, concurrency, duration_sec, warmup_sec, mode="keywo
         session.mount("http://", adapter)
 
         while not stop_event.is_set():
-            query = random.choice(SAMPLE_QUERIES)
+            query = random.choice(queries)
             payload = {"query": query, "mode": mode, "top": 5}
             t0 = time.perf_counter()
             try:
@@ -216,11 +238,14 @@ def main():
     parser.add_argument("--warmup", type=int, default=2, help="Warmup duration (seconds)")
     parser.add_argument("--mode", "-m", choices=["keyword", "expanded"], default="keyword",
                         help="Search mode: 'keyword' (fast direct index lookup) or 'expanded' (AI Query Expansion via Ollama)")
+    parser.add_argument("--queries", "-q", default=None,
+                        help="Path to external .txt file with search queries (default: benchmarks/queries.txt)")
     parser.add_argument("--output-csv", default="benchmarks/results/search_scalability.csv", help="CSV output path")
     parser.add_argument("--output-plot", default="docs/benchmarks/search_throughput.png", help="Plot PNG output path")
     args = parser.parse_args()
 
     mode = args.mode.lower()
+    queries, queries_source = load_queries(args.queries)
 
     api_base = args.url.rsplit("/", 1)[0]
     ok, info = check_server(api_base)
@@ -233,6 +258,7 @@ def main():
     if doc_count == 0:
         print("[WARN] Index is empty! Search results may not reflect realistic load.")
 
+    print(f"[INFO] Loaded {len(queries)} sample queries from: {queries_source}")
     print(f"[INFO] Starting load test on {args.url}")
     print(f"[INFO] Mode: {mode.upper()} | Levels: {args.clients} | Duration per step: {args.duration}s | Warmup: {args.warmup}s")
     print("-" * 85)
@@ -241,7 +267,7 @@ def main():
 
     results = []
     for c in args.clients:
-        res = run_load_step(args.url, c, args.duration, args.warmup, mode=mode)
+        res = run_load_step(args.url, c, args.duration, args.warmup, mode=mode, queries=queries)
         results.append(res)
         print(f"{res['clients']:>8} | {res['total_requests']:>10} | {res['rps']:>10.1f} | "
               f"{res['avg_lat_ms']:>8.2f}ms | {res['p50_lat_ms']:>6.2f}ms | {res['p95_lat_ms']:>6.2f}ms | "
