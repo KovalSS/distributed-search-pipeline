@@ -40,7 +40,7 @@
 - **LLM Engine (Query Expansion)**: локальний сервер Ollama з моделлю `llama3.2:1b`, що генерує релевантні ключові слова та комерційні синоніми через REST API `/api/generate`.
 - **Клієнти**:
   - **Web Client**: чистий інтерфейс (HTML5, modern CSS, ванільний JavaScript) із вибором режиму пошуку, стрімінгом пайплайну через WebSocket та переглядом вихідного JSON-документа.
-  - **CLI Clients**: консольні клієнти на Python 3 (`search.py`, `index.py`) з підтримкою аргументів командного рядка (`--mode`, `--raw`, `--top`, `--threads`, `--benchmark`) та інтерактивного термінального режиму.
+  - **CLI Clients**: консольні клієнти на Python 3 (`search.py`, `index.py`) з підтримкою аргументів командного рядка (`--mode`, `--raw`, `--top`, `--threads`, `--status`) та інтерактивного термінального режиму.
 - **Контейнеризація**: Docker Compose об'єднує сервіси `search-server` та `ollama` у спільній ізольованій мережі.
 
 ---
@@ -86,9 +86,7 @@ curl http://localhost:8080/api/health
 
 ### 1. Джерело датасету
 
-Згідно з вимогами силабусу, для роботи системи необхідний текстовий набір документів англійською мовою обсягом не менше 1 ГБ та не менше 10 000 документів.
-
-У проєкті використано офіційний датасет **Amazon Reviews 2023**:
+Для індексації використовується датасет обсягом понад 1 ГБ (400 000 повнотекстових документів) — **Amazon Reviews 2023**:
 - Репозиторій: https://amazon-reviews-2023.github.io/index.html
 - Категорія: `Health_and_Household`
 - Тип завантаження: **meta** (метадані товарів: `title`, `description`, `features`, `store`)
@@ -122,10 +120,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Файл `requirements.txt` містить залежності:
-- `requests>=2.31.0` — HTTP-запити для тестувальних скриптів;
-- `matplotlib>=3.8.0` — візуалізація та генерація графіків масштабованості;
-- `locust>=2.24.0` — стрес-тестування системи під навантаженням.
+Файл `requirements.txt` містить необхідні бібліотеки для тестування та візуалізації (`requests`, `matplotlib`, `locust`).
 
 ### 4. Нарізка датасету на паралельні батчі
 
@@ -243,7 +238,7 @@ python cli-client/search.py --mode keyword
 
 ### Консольне керування індексом (CLI Index)
 
-Скрипт `cli-client/index.py` забезпечує керування та аналіз процесу побудови індексу:
+Скрипт `cli-client/index.py` забезпечує перевірку статусу та запуск побудови індексу:
 
 **Перевірка стану сервера та індексу:**
 
@@ -251,19 +246,13 @@ python cli-client/search.py --mode keyword
 python cli-client/index.py --status
 ```
 
-**Паралельна побудова індексу з фіксацією потоків:**
+**Паралельна побудова індексу з фіксацією кількості потоків:**
 
 ```bash
-python cli-client/index.py --threads 12 --force
+python cli-client/index.py --threads 12
 ```
 
-**Бенчмаркінг індексації при різній кількості потоків із збереженням у CSV:**
 
-```bash
-python cli-client/index.py --benchmark 1 2 4 8 12 16 32 --output benchmarks/results/index_speedup.csv
-```
-
----
 
 ## Специфікація API
 
@@ -424,21 +413,29 @@ python cli-client/index.py --benchmark 1 2 4 8 12 16 32 --output benchmarks/resu
 
 ### 1. Дослідження часу побудови індексу від кількості потоків
 
-Скрипт `cli-client/index.py` виконує серію запусків індексації при різній кількості потоків та фіксує результати в CSV-файл:
+Скрипт `benchmarks/benchmark_index.py` є повноцінним автономним інструментом тестування масштабованості паралельної побудови індексу: він виконує серію запусків індексації, проводить статистичне усереднення метрик, формує підсумкову зведену таблицю, експортує CSV-протокол та автоматично генерує графіки.
+
+**Запуск бенчмарку за діапазоном потоків з усередненням по 3 запусках:**
 
 ```bash
-python cli-client/index.py --benchmark 1 2 4 8 12 16 32 --output benchmarks/results/index_speedup.csv
+python benchmarks/benchmark_index.py --range 1 32 --runs 3
 ```
 
-Для побудови графіків часу побудови та коефіцієнта прискорення ($S_p = T_1 / T_p$):
+**Запуск за фіксованим списком потоків:**
 
 ```bash
-python benchmarks/plot_index_speedup.py --csv benchmarks/results/index_speedup.csv --output docs/benchmarks/index_speedup.png
+python benchmarks/benchmark_index.py --threads 1 2 4 8 12 16 24 32 --runs 1
+```
+
+**Перемалювання графіків з уже збереженого CSV (без повторних запитів):**
+
+```bash
+python benchmarks/benchmark_index.py --from-csv benchmarks/results/index_speedup.csv
 ```
 
 Скрипт генерує два графіки:
-- `docs/benchmarks/index_build_time.png` — абсолютний час виконання у секундах;
-- `docs/benchmarks/index_speedup.png` — графік фактичного прискорення порівняно з ідеальним лінійним прискоренням.
+- `docs/benchmarks/index_build_time.png` — абсолютний час виконання у секундах (з напівпрозорою смугою діапазону Min-Max між запусками);
+- `docs/benchmarks/index_speedup.png` — графік коефіцієнта прискорення $S_p = T_1 / T_p$ від кількості потоків.
 
 ### 2. Навантажувальне тестування пошукового API
 
@@ -463,22 +460,14 @@ python benchmarks/benchmark_search.py --mode expanded --clients 1 2 4 8 --durati
 
 ### 3. Навантажувальне тестування через Locust
 
-Для інтерактивного тестування під навантаженням використовується Locust:
+Сценарій навантажувального тестування для базового та розширеного пошуку:
 
 ```bash
-locust -f benchmarks/locustfile.py --host http://localhost:8080
-```
+# Базовий пошук за ключовими словами (keyword):
+locust -f benchmarks/locustfile.py --headless --users 100 --spawn-rate 10 --run-time 30s --host http://localhost:8080 --mode keyword
 
-Після запуску відкрийте браузер за адресою `http://localhost:8089`.
-
-Також доступний консольний headless-режим:
-
-```bash
-# Тест режиму keyword:
-locust -f benchmarks/locustfile.py --headless --users 200 --spawn-rate 20 --run-time 60s --host http://localhost:8080 --mode keyword
-
-# Тест режиму expanded:
-locust -f benchmarks/locustfile.py --headless --users 10 --spawn-rate 2 --run-time 60s --host http://localhost:8080 --mode expanded
+# Пошук із розширенням запитів через LLM (expanded):
+locust -f benchmarks/locustfile.py --headless --users 10 --spawn-rate 2 --run-time 30s --host http://localhost:8080 --mode expanded
 ```
 
 ---
@@ -555,10 +544,10 @@ distributed-search-pipeline/
 │   └── app.js                  # Клієнтська логіка WebSocket та REST взаємодії
 ├── cli-client/                 # Консольні клієнти на Python
 │   ├── search.py               # Консольний пошук (keyword / expanded, --raw, інтерактивний режим)
-│   └── index.py                # Консольний запуск індексації та зняття метрик
+│   └── index.py                # Консольний запуск індексації та перевірка статусу
 ├── benchmarks/                 # Інструменти дослідження масштабованості
 │   ├── benchmark_search.py     # Стрес-тест пропускної здатності та затримки
-│   ├── plot_index_speedup.py   # Побудова графіків прискорення індексації
+│   ├── benchmark_index.py      # Тестувальник масштабованості та візуалізатор прискорення індексації
 │   ├── locustfile.py           # Сценарій навантажувального тестування для Locust
 │   └── results/                # Збережені протоколи вимірювань (CSV)
 └── docs/                       # Проєктна документація
