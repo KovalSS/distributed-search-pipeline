@@ -1,10 +1,14 @@
 package ua.kpi.ipsa.searchserver.index;
 
-import java.io.BufferedReader;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,8 +92,8 @@ public class IndexingService {
             ConcurrentHashMap<String, DocLocation> targetLocations, AtomicInteger counter) {
         for (Path file : chunk) {
             short fileIdx = fileIndexMap.getOrDefault(file, (short) 0);
-            try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.READ)) {
-                java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(64 * 1024);
+            try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+                ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
                 byte[] lineBuffer = new byte[8192];
                 int lineLen = 0;
                 long currentPos = 0;
@@ -106,7 +110,7 @@ public class IndexingService {
                                 textLen--;
                             }
                             if (textLen > 0) {
-                                String line = new String(lineBuffer, 0, textLen, java.nio.charset.StandardCharsets.UTF_8);
+                                String line = new String(lineBuffer, 0, textLen, StandardCharsets.UTF_8);
                                 if (!line.isBlank()) {
                                     try {
                                         ProductDocument product = objectMapper.readValue(line, ProductDocument.class);
@@ -131,7 +135,7 @@ public class IndexingService {
                             lineStartOffset = currentPos;
                         } else {
                             if (lineLen >= lineBuffer.length) {
-                                lineBuffer = java.util.Arrays.copyOf(lineBuffer, lineBuffer.length * 2);
+                                lineBuffer = Arrays.copyOf(lineBuffer, lineBuffer.length * 2);
                             }
                             lineBuffer[lineLen++] = b;
                         }
@@ -199,12 +203,12 @@ public class IndexingService {
             return null;
         }
         Path file = datasetFiles.get(loc.fileIndex());
-        try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(file, java.nio.file.StandardOpenOption.READ)) {
-            java.nio.ByteBuffer dst = java.nio.ByteBuffer.allocate(loc.length());
+        try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+            ByteBuffer dst = ByteBuffer.allocate(loc.length());
             channel.position(loc.byteOffset());
             channel.read(dst);
             dst.flip();
-            return java.nio.charset.StandardCharsets.UTF_8.decode(dst).toString().trim();
+            return StandardCharsets.UTF_8.decode(dst).toString().trim();
         } catch (IOException e) {
             return null;
         }
