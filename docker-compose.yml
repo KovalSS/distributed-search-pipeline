@@ -6,6 +6,17 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        /bin/ollama serve &
+        pid=$$!;
+        trap 'kill -TERM $$pid; wait $$pid' TERM INT;
+        until /bin/ollama list > /dev/null 2>&1; do sleep 1; done;
+        /bin/ollama list | grep -q "llama3.2:1b" || /bin/ollama pull llama3.2:1b;
+        echo "Ollama model llama3.2:1b is ready.";
+        wait $$pid
 
   search-server:
     build: ./search-server
@@ -23,3 +34,5 @@ services:
 
 volumes:
   ollama-data:
+
+
