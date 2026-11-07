@@ -49,6 +49,12 @@ docs/benchmarks/
 benchmarks/queries.txt
 queries.txt
 
+### Tools & UML Sources ###
+plantuml.jar
+docs/uml/plantuml/
+uml/
+*.puml
+
 ### Dataset files ###
 data/*
 !data/raw/
