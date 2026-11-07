@@ -16,9 +16,9 @@
 4. [Датасет: джерело, нарізка та підготовка](#датасет-джерело-нарізка-та-підготовка)
 5. [Побудова індексу (Індексація)](#побудова-індексу-індексація)
 6. [Використання клієнтів](#використання-клієнтів)
-   - [Web UI](#веб-клієнт-web-ui)
-   - [CLI Search](#консольний-пошук-cli-search)
-   - [CLI Index](#консольне-керування-індексом-cli-index)
+   - [Веб-клієнт (Web UI)](#веб-клієнт-web-ui)
+   - [Консольний пошук (CLI Search)](#консольний-пошук-cli-search)
+   - [Консольне керування індексом (CLI Index)](#консольне-керування-індексом-cli-index)
 7. [Специфікація API](#специфікація-api)
    - [REST API](#rest-api)
    - [WebSocket API](#websocket-api)
@@ -33,14 +33,14 @@
 Система реалізує клієнт-серверний пайплайн із розподілом обчислень між компонентами:
 
 - **Search Server (Backend)**: Java 21, Spring Boot 3, Maven.
-  - **Власний пул потоків (`ThreadPool`)**: реалізований без використання високорівневих утиліт `java.util.concurrent.ExecutorService`. Працює на базі власної потокобезпечної блокуючої черги задач (`ThreadSafeTaskQueue`) з механізмом `wait/notifyAll`.
+  - **Власний пул потоків (ThreadPool)**: реалізований без використання високорівневих утиліт `java.util.concurrent.ExecutorService`. Працює на базі власної потокобезпечної блокуючої черги задач (`ThreadSafeTaskQueue`) з механізмом `wait`/`notifyAll`.
   - **Власна потокобезпечна структура індексу**: комбінація хеш-таблиці `CustomHashMap` та потокобезпечних списків входжень `ConcurrentPostingList` із блокуваннями на рівні записів для запобігання стану гонки (race conditions) при паралельній індексації.
-  - **Пошуковий рушій**: повнотекстовий пошук за ключовими словами (keyword search) із підрахунком частоти входжень термінів (Term Frequency, TF) та ранжуванням результатів за релевантністю (score).
+  - **Пошуковий рушій**: повнотекстовий пошук за ключовими словами (`keyword search`) та збагачений запит через LLM (`expanded search`) із ранжуванням результатів за релевантністю (score).
   - **WebSocket Handler**: стрімінг проміжних стадій обробки запиту клієнту в реальному часі.
-- **LLM Engine (Query Expansion)**: локальний сервер Ollama з моделлю `llama3.2:1b`, що генерує релевантні ключові слова та синоніми до запиту через REST API `/api/generate`.
+- **LLM Engine (Query Expansion)**: локальний сервер Ollama з моделлю `llama3.2:1b`, що генерує релевантні ключові слова та комерційні синоніми через REST API `/api/generate`.
 - **Клієнти**:
-  - **Web Client**: чистий інтерфейс (HTML5, modern CSS, ванільний JavaScript) із підтримкою двостороннього WebSocket-зв'язку та переглядом вихідного JSON-документа.
-  - **CLI Clients**: консольні клієнти на Python 3 (`search.py`, `index.py`) з підтримкою аргументів командного рядка та інтерактивного режиму.
+  - **Web Client**: чистий інтерфейс (HTML5, modern CSS, ванільний JavaScript) із вибором режиму пошуку, стрімінгом пайплайну через WebSocket та переглядом вихідного JSON-документа.
+  - **CLI Clients**: консольні клієнти на Python 3 (`search.py`, `index.py`) з підтримкою аргументів командного рядка (`--mode`, `--raw`, `--top`, `--threads`, `--benchmark`) та інтерактивного термінального режиму.
 - **Контейнеризація**: Docker Compose об'єднує сервіси `search-server` та `ollama` у спільній ізольованій мережі.
 
 ---
@@ -106,8 +106,8 @@ curl http://localhost:8080/api/health
 
 ```
 data/
-  raw/         # Папка для вихідного завантаженого .jsonl файлу
-  batched/     # Папка для нарізаних батчів, які монтуються в Docker-контейнер
+  raw/          # Папка для вихідного завантаженого .jsonl файлу
+  batched/      # Папка для нарізаних батчів, які монтуються в Docker-контейнер
 ```
 
 *Примітка:* Директорія `data/` включена у `.gitignore`, тому самі великі файли даних не зберігаються в репозиторії Git.
@@ -133,7 +133,7 @@ pip install -r requirements.txt
 Файл `requirements.txt` містить залежності:
 - `requests>=2.31.0` — HTTP-запити для тестувальних скриптів;
 - `matplotlib>=3.8.0` — візуалізація та генерація графіків масштабованості;
-- `locust>=2.24.0` — стрес-тестування системи під високим навантаженням.
+- `locust>=2.24.0` — стрес-тестування системи під навантаженням.
 
 ### 4. Нарізка датасету на паралельні батчі
 
@@ -208,35 +208,44 @@ curl http://localhost:8080/api/stats
 
 ### Веб-клієнт (Web UI)
 
-Веб-інтерфейс реалізований як статичний клієнт без зовнішніх залежностей.
+Веб-інтерфейс реалізований як статичний клієнт без сторонніх залежностей.
 
-1. Відкрийте файл `web-client/index.html` у веб-браузері (подвійним кліком або перетягуванням у вікно браузера).
+1. Відкрийте файл `web-client/index.html` у браузері (подвійним кліком або перетягуванням у вікно браузера).
 2. Можливості веб-інтерфейсу:
-   - **WebSocket-стрімінг**: відображення живого статусу виконання пайплайну в реальному часі (з'єднання з сокетом -> генерація синонімів через Ollama -> сканування інвертованого індексу -> фінальний результат).
-   - **Картки результатів**: показ релевантності (Score), назви товару, ідентифікатора документа та кнопки "View Raw JSON" для перегляду повного оригінального документа з датасету.
-   - **Панель індексації**: можливість запустити перебудову індексу з довільною кількістю потоків (від 1 до 128) прямо з інтерфейсу.
+   - **Вибір режиму пошуку**: перемикач між **Keyword** (швидкий пошук за індексом) та **Expanded** (збагачення запиту через Ollama).
+   - **WebSocket-стрімінг**: відображення живого статусу виконання пайплайну в реальному часі (з'єднання з сокетом $\to$ генерація синонімів через Ollama $\to$ сканування індексу $\to$ фінальний результат).
+   - **Картки результатів**: показ релевантності (Score), назви товару, ідентифікатора документа та кнопки "View raw product JSON" для перегляду повного оригінального документа з датасету.
+   - **Панель індексації**: можливість запустити перебудову індексу з вказанням кількості потоків (від 1 до 128) прямо з інтерфейсу.
 
 ### Консольний пошук (CLI Search)
 
 Скрипт `cli-client/search.py` реалізує клієнт повнотекстового пошуку через термінал:
 
-**Одиночний пошуковий запит:**
+**Одиночний пошуковий запит у режимі keyword:**
 
 ```bash
-python cli-client/search.py "protein powder vanilla" --top 5
+python cli-client/search.py "protein powder vanilla" --mode keyword --top 5
+```
+
+**Пошук із розширенням через Ollama та переглядом вихідного JSON:**
+
+```bash
+python cli-client/search.py "vitamin c serum" --mode expanded --raw
 ```
 
 **Інтерактивний режим:**
 
 ```bash
-python cli-client/search.py
+python cli-client/search.py --mode keyword
 ```
 
 У цьому режимі користувач може вводити запити послідовно. Для виходу достатньо ввести `exit` або натиснути `Ctrl+C`.
 
 **Параметри `cli-client/search.py`:**
 - `query`: текстовий пошуковий запит (якщо не вказано — запускається інтерактивний режим);
+- `--mode`, `-m`: режим пошуку: `keyword` або `expanded` (за замовчуванням `keyword`);
 - `--top`, `-k`: кількість результатів у вибірці (за замовчуванням `5`);
+- `--raw`, `-r`: відображати повний сирий JSON документа з диска;
 - `--url`: адреса ендпоінту пошуку (за замовчуванням `http://localhost:8080/api/search`);
 - `--stats-url`: адреса ендпоінту статистики (за замовчуванням `http://localhost:8080/api/stats`).
 
@@ -256,6 +265,12 @@ python cli-client/index.py --status
 python cli-client/index.py --threads 12 --force
 ```
 
+**Бенчмаркінг індексації при різній кількості потоків із збереженням у CSV:**
+
+```bash
+python cli-client/index.py --benchmark 1 2 4 8 12 16 32 --output benchmarks/results/index_speedup.csv
+```
+
 ---
 
 ## Специфікація API
@@ -269,7 +284,7 @@ python cli-client/index.py --threads 12 --force
 | `GET` | `/api/health` | Відсутнє | `{"status": "ok", "ollama": true}` | Перевірка працездатності пошукового сервера та зв'язку з контейнером Ollama |
 | `POST` | `/api/index` | `{"threads": 8}` | `{"status": "ok", "documents_indexed": 400000, "time_ms": 23412}` | Запуск паралельної побудови індексу пулом із вказаної кількості потоків |
 | `GET` | `/api/stats` | Відсутнє | `{"documents": 400000, "index_build_time_ms": 19771, "threads_used": 12}` | Отримання статистики поточної копії індексу у пам'яті |
-| `POST` | `/api/search` | `{"query": "organic tea", "mode": "keyword", "top": 5}` | `{"results": [{"doc_id": "...", "score": 14.2, "snippet": "...", "raw": {...}}], "time_ms": 4.2}` | Пошук документів за ключовими словами з ранжуванням |
+| `POST` | `/api/search` | `{"query": "organic tea", "mode": "keyword", "top": 5}` | `{"results": [{"doc_id": "...", "score": 14.2, "snippet": "...", "raw": {...}}], "time_ms": 4.2, "synonyms": [...]}` | Пошук документів у режимі `keyword` або `expanded` із Min-Heap ранжуванням |
 
 ### WebSocket API
 
@@ -278,12 +293,12 @@ python cli-client/index.py --threads 12 --force
 Клієнт відправляє JSON-повідомлення:
 
 ```json
-{"query": "vitamin c supplements"}
+{"query": "vitamin c supplements", "mode": "expanded", "top": 5}
 ```
 
 Сервер транслює послідовність повідомлень на кожному етапі пайплайну:
 
-1. **Етап 1: Query Expansion (розширення запиту через LLM)**
+1. **Етап 1: Query Expansion (розширення запиту через LLM)** *(у режимі keyword цей етап автоматично пропускається)*:
    ```json
    {
      "stage": "query_expansion",
@@ -294,7 +309,7 @@ python cli-client/index.py --threads 12 --force
    }
    ```
 
-2. **Етап 2: Keyword Search (пошук в інвертованому індексі)**
+2. **Етап 2: Keyword Search (пошук в інвертованому індексі)**:
    ```json
    {
      "stage": "keyword_search",
@@ -312,7 +327,7 @@ python cli-client/index.py --threads 12 --force
    }
    ```
 
-3. **Етап 3: Завершення пайплайну**
+3. **Етап 3: Завершення пайплайну**:
    ```json
    {
      "stage": "done"
@@ -330,25 +345,29 @@ python cli-client/index.py --threads 12 --force
 Скрипт `cli-client/index.py` виконує серію запусків індексації при різній кількості потоків та фіксує результати в CSV-файл:
 
 ```bash
-python cli-client/index.py --benchmark 1 2 4 8 12 16 --output benchmarks/results/indexing_benchmark.csv
+python cli-client/index.py --benchmark 1 2 4 8 12 16 32 --output benchmarks/results/index_speedup.csv
 ```
 
-Для побудови графіків часу побудови та коефіцієнта прискорення (Speedup factor $S_p = T_1 / T_p$):
+Для побудови графіків часу побудови та коефіцієнта прискорення ($S_p = T_1 / T_p$):
 
 ```bash
-python benchmarks/plot_index_speedup.py --csv benchmarks/results/indexing_benchmark.csv --output docs/benchmarks/index_speedup.png
+python benchmarks/plot_index_speedup.py --csv benchmarks/results/index_speedup.csv --output docs/benchmarks/index_speedup.png
 ```
 
-Скрипт згенерує два графіки:
+Скрипт генерує два графіки:
 - `docs/benchmarks/index_build_time.png` — абсолютний час виконання у секундах;
 - `docs/benchmarks/index_speedup.png` — графік фактичного прискорення порівняно з ідеальним лінійним прискоренням.
 
-### 2. Навантажувальне тестування пошукового API (Throughput & Latency)
+### 2. Навантажувальне тестування пошукового API
 
-Автономний скрипт `benchmarks/benchmark_search.py` імітує паралельні клієнтські запити за різної кількості потоків-клієнтів:
+Автономний скрипт `benchmarks/benchmark_search.py` імітує паралельні клієнтські запити:
 
 ```bash
-python benchmarks/benchmark_search.py --clients 1 5 10 20 30 50 75 --duration 10 --output-csv benchmarks/results/search_scalability.csv --output-plot docs/benchmarks/search_throughput.png
+# Тест режиму keyword:
+python benchmarks/benchmark_search.py --mode keyword --clients 1 5 10 20 30 50 75 100 --duration 10 --output-csv benchmarks/results/search_keyword.csv --output-plot docs/benchmarks/search_throughput.png
+
+# Тест режиму expanded:
+python benchmarks/benchmark_search.py --mode expanded --clients 1 2 4 8 --duration 15 --output-csv benchmarks/results/search_expanded.csv
 ```
 
 Скрипт вимірює:
@@ -368,7 +387,17 @@ python benchmarks/benchmark_search.py --clients 1 5 10 20 30 50 75 --duration 10
 locust -f benchmarks/locustfile.py --host http://localhost:8080
 ```
 
-Після запуску відкрийте браузер за адресою `http://localhost:8089`, де можна налаштувати кількість одночасних користувачів (Users) та швидкість нарощування (Spawn rate).
+Після запуску відкрийте браузер за адресою `http://localhost:8089`.
+
+Також доступний консольний headless-режим:
+
+```bash
+# Тест режиму keyword:
+locust -f benchmarks/locustfile.py --headless --users 200 --spawn-rate 20 --run-time 60s --host http://localhost:8080 --mode keyword
+
+# Тест режиму expanded:
+locust -f benchmarks/locustfile.py --headless --users 10 --spawn-rate 2 --run-time 60s --host http://localhost:8080 --mode expanded
+```
 
 ---
 
@@ -377,7 +406,7 @@ locust -f benchmarks/locustfile.py --host http://localhost:8080
 Усі архітектурні діаграми, виконані відповідно до вимог курсової роботи, збережені у форматі PNG у директорії `docs/uml/`:
 
 - **Use Case Diagram**: `docs/uml/01_use_case.png` — прецеденти використання системи користувачем і зовнішніми сервісами;
-- **Class Diagram**: `docs/uml/02_class.png` — статична структура класів сервера (ThreadPool, InvertedIndex, Controllers, OllamaClient);
+- **Class Diagram**: `docs/uml/02_class.png` — статична структура класів сервера (`ThreadPool`, `InvertedIndex`, `Controllers`, `OllamaClient`);
 - **Sequence Diagrams**:
   - `docs/uml/03_seq_uc1_health.png` — послідовність перевірки стану системи;
   - `docs/uml/04_seq_uc2_index.png` — паралельна побудова індексу пулом потоків;
@@ -397,35 +426,60 @@ distributed-search-pipeline/
 ├── README.md                   # Документація проєкту
 ├── data/
 │   ├── raw/                    # Директорія для вихідного .jsonl файлу датасету
-│   └── batched/                # Нарізані файли пакетів (batch_0001.jsonl ... batch_0080.jsonl)
+│   └── batched/                # Нарізані батч-файли (batch_0001.jsonl ... batch_0080.jsonl)
 ├── scripts/
-│   └── slice_dataset.py        # Утиліта для нарізки сирого датасету на батчі
+│   └── slice_dataset.py        # Утиліта для нарізки сирого датасету на паралельні батчі
 ├── search-server/              # Бекенд пошукової системи (Java 21, Spring Boot)
-│   ├── Dockerfile              # Багатоетапний докерфайл збірки сервера
+│   ├── Dockerfile              # Багатоетапний Dockerfile збірки сервера
 │   ├── pom.xml                 # Специфікація залежностей Maven
 │   ├── mvnw / mvnw.cmd         # Maven Wrapper
 │   └── src/
 │       ├── main/java/ua/kpi/ipsa/searchserver/
-│       │   ├── controller/     # REST-контролери (Health, Index, Search, Stats)
-│       │   ├── dto/            # Data Transfer Objects (запити та відповіді)
-│       │   ├── index/          # InvertedIndex, CustomHashMap, ConcurrentPostingList, SearchService
-│       │   ├── ollama/         # Клієнт взаємодії з Ollama API (Query Expansion)
-│       │   ├── threadpool/     # Власний ThreadPool та блокуюча черга задач
-│       │   └── websocket/      # Обробник WebSocket-стрімінгу пошукового пайплайну
-│       └── test/java/          # Модульні та інтеграційні тести
+│       │   ├── SearchServerApplication.java  # Точка входу Spring Boot застосунку
+│       │   ├── WebConfig.java                # Глобальна конфігурація CORS для веб-клієнта
+│       │   ├── controller/                   # REST-контролери ендпоінтів API
+│       │   │   ├── HealthController.java     # GET /api/health (стан сервера та Ollama)
+│       │   │   ├── IndexController.java      # POST /api/index (запуск паралельної індексації)
+│       │   │   ├── SearchController.java     # POST /api/search (пошук keyword / expanded)
+│       │   │   └── StatsController.java      # GET /api/stats (метрики обсягу та часу індексу)
+│       │   ├── dto/                          # Data Transfer Objects (моделі запитів і відповідей)
+│       │   │   ├── HealthResponse.java       # Відповідь стану сервера
+│       │   │   ├── IndexRequest.java         # Запит індексації (параметр threads)
+│       │   │   ├── IndexResponse.java        # Результат індексації (documents_indexed, time_ms)
+│       │   │   ├── SearchRequest.java        # Пошуковий запит (query, mode, top)
+│       │   │   ├── SearchResponse.java       # Результати пошуку (results, time_ms, synonyms)
+│       │   │   └── StatsResponse.java        # Статистика індексу (documents, build_time, threads)
+│       │   ├── index/                        # Ядро індексації, зберігання та ранжування
+│       │   │   ├── ConcurrentPostingList.java# Lock-free однозв'язний список входжень на базі CAS
+│       │   │   ├── CustomHashMap.java        # Власна хеш-таблиця з сегментним блокуванням (256 замків)
+│       │   │   ├── IndexingService.java      # Паралельна обробка батчів, DocLocation, FileChannel
+│       │   │   ├── InvertedIndex.java        # Потокобезпечна структура інвертованого індексу
+│       │   │   ├── ProductDocument.java      # Модель JSON-документа товару датасету Amazon
+│       │   │   └── SearchService.java        # Пошуковий сервіс, Min-Heap Top-K, дискове читання
+│       │   ├── ollama/                       # Клієнт взаємодії з Ollama API (Query Expansion)
+│       │   │   ├── OllamaClient.java         # HTTP-клієнт до Ollama (/api/generate, /api/tags)
+│       │   │   ├── OllamaGenerateRequest.java# Модель запиту до Ollama з промптом
+│       │   │   └── OllamaGenerateResponse.java# Модель відповіді Ollama зі згенерованим текстом
+│       │   ├── threadpool/                   # Власний пул потоків без ExecutorService
+│       │   │   ├── ThreadPool.java           # Управління воркерами, синхронізація wait/notifyAll
+│       │   │   └── ThreadSafeTaskQueue.java  # Блокуюча потокобезпечна черга задач
+│       │   └── websocket/                    # Обробник WebSocket-стрімінгу пошукового пайплайну
+│       │       ├── SearchWebSocketHandler.java# Стрімінг фаз (query_expansion -> search -> done)
+│       │       └── WebSocketConfig.java      # Реєстрація сокет-ендпоінта /ws/search
+│       └── test/java/                        # Модульні та інтеграційні тести
 ├── web-client/                 # Веб-інтерфейс пошукової системи
-│   ├── index.html              # Розмітка сторінки
+│   ├── index.html              # Розмітка сторінки з вибором режиму та переглядом JSON
 │   ├── style.css               # Стилі оформлення
 │   └── app.js                  # Клієнтська логіка WebSocket та REST взаємодії
 ├── cli-client/                 # Консольні клієнти на Python
-│   ├── search.py               # Консольний пошук (одиничний та інтерактивний режими)
-│   └── index.py                # Консольний запуск індексації та бенчмаркінгу
+│   ├── search.py               # Консольний пошук (keyword / expanded, --raw, інтерактивний режим)
+│   └── index.py                # Консольний запуск індексації та зняття метрик
 ├── benchmarks/                 # Інструменти дослідження масштабованості
 │   ├── benchmark_search.py     # Стрес-тест пропускної здатності та затримки
 │   ├── plot_index_speedup.py   # Побудова графіків прискорення індексації
 │   ├── locustfile.py           # Сценарій навантажувального тестування для Locust
 │   └── results/                # Збережені протоколи вимірювань (CSV)
 └── docs/                       # Проєктна документація
-    ├── uml/                    # UML-діаграми у форматі PNG
+    ├── uml/                    # Архітектурні діаграми (.png)
     └── benchmarks/             # Згенеровані графіки масштабованості
 ```
