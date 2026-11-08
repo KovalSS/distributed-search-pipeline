@@ -252,7 +252,12 @@ python cli-client/index.py --status
 python cli-client/index.py --threads 12
 ```
 
+**Параметри `cli-client/index.py`:**
+- `--threads`, `-t`: кількість робочих потоків для побудови індексу (за замовчуванням `8`);
+- `--status`, `-s`: перевірка працездатності сервера та стану індексу;
+- `--url`: базова адреса пошукового сервера (за замовчуванням `http://localhost:8080`).
 
+---
 
 ## Специфікація API
 
@@ -442,11 +447,14 @@ python benchmarks/benchmark_index.py --from-csv benchmarks/results/index_speedup
 Автономний скрипт `benchmarks/benchmark_search.py` імітує паралельні клієнтські запити:
 
 ```bash
-# Тест режиму keyword:
-python benchmarks/benchmark_search.py --mode keyword --clients 1 5 10 20 30 50 75 100 --duration 10 --output-csv benchmarks/results/search_keyword.csv --output-plot docs/benchmarks/search_throughput.png
+# Тест режиму keyword за діапазоном клієнтів (від 10 до 100 з кроком 10, по 10 с на рівень):
+python benchmarks/benchmark_search.py --mode keyword --range 10 100 10 --duration 10 --output-csv benchmarks/results/search_keyword.csv
 
-# Тест режиму expanded:
-python benchmarks/benchmark_search.py --mode expanded --clients 1 2 4 8 --duration 15 --output-csv benchmarks/results/search_expanded.csv
+# Тест режиму expanded (від 1 до 8 клієнтів):
+python benchmarks/benchmark_search.py --mode expanded --range 1 8 1 --duration 15 --output-csv benchmarks/results/search_expanded.csv
+
+# Перемалювання графіків з уже збереженого CSV:
+python benchmarks/benchmark_search.py --from-csv benchmarks/results/search_keyword.csv --mode keyword
 ```
 
 Скрипт вимірює:
