@@ -34,7 +34,6 @@ public class SearchController {
             return new SearchResponse(List.of(), 0);
         }
 
-        long start = System.currentTimeMillis();
         List<String> synonyms = null;
         String queryToSearch = request.query();
 
@@ -45,7 +44,9 @@ public class SearchController {
             }
         }
 
+        long start = System.currentTimeMillis();
         List<SearchService.ScoredDoc> scored = searchService.keywordSearch(queryToSearch, request.top());
+        long elapsed = System.currentTimeMillis() - start;
 
         List<SearchResponse.SearchResult> results = new ArrayList<>();
         for (SearchService.ScoredDoc doc : scored) {
@@ -60,7 +61,6 @@ public class SearchController {
             results.add(new SearchResponse.SearchResult(doc.docId(), doc.score(), doc.title(), rawObj));
         }
 
-        long elapsed = System.currentTimeMillis() - start;
         return new SearchResponse(results, elapsed, synonyms);
     }
 }
