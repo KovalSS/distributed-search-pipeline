@@ -20,8 +20,8 @@ public class IndexController {
     }
 
     @PostMapping("/index")
-    public IndexResponse index(@RequestBody IndexRequest request) {
-        int threads = (request.threads() == null || request.threads() <= 0)
+    public IndexResponse index(@RequestBody(required = false) IndexRequest request) {
+        int threads = (request == null || request.threads() == null || request.threads() <= 0)
                 ? Runtime.getRuntime().availableProcessors()
                 : request.threads();
         IndexingService.IndexResult result = indexingService.buildIndex(threads);
