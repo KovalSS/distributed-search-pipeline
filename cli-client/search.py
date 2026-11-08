@@ -2,6 +2,7 @@
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -20,7 +21,13 @@ def check_index_status(stats_url: str) -> tuple[bool, int]:
         return False, 0
 
 
-def run_search(server_url: str, query: str, mode: str, top: int) -> dict:
+def format_duration(ms: float) -> str:
+    if ms < 1000:
+        return f"{ms:.1f} ms" if ms < 10 else f"{round(ms)} ms"
+    return f"{ms / 1000.0:.2f} s"
+
+
+def run_search(server_url: str, query: str, mode: str, top: int) -> tuple[dict, float]:
     payload = json.dumps({"query": query, "mode": mode, "top": top}).encode("utf-8")
     request = urllib.request.Request(
         server_url,
@@ -28,18 +35,31 @@ def run_search(server_url: str, query: str, mode: str, top: int) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    t0 = time.perf_counter()
     with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+        data = json.loads(response.read().decode("utf-8"))
+    elapsed_total_ms = (time.perf_counter() - t0) * 1000.0
+    return data, elapsed_total_ms
 
 
-def print_results(data: dict, query: str, mode: str, show_raw: bool = False) -> None:
+def print_results(
+    data: dict,
+    query: str,
+    mode: str,
+    total_time_ms: float | None = None,
+    show_raw: bool = False,
+) -> None:
     results = data.get("results", [])
-    time_ms = data.get("time_ms", "?")
+    search_ms = data.get("time_ms", "?")
     synonyms = data.get("synonyms")
 
     print("\n" + "-" * 60)
     print(f"Search results for: \"{query}\"")
-    print(f"Found: {len(results)} | Response time: {time_ms} ms | Mode: {mode.upper()}")
+    if total_time_ms is not None:
+        total_str = format_duration(total_time_ms)
+        print(f"Found: {len(results)} | Search: {search_ms} ms | Total: {total_str} | Mode: {mode.upper()}")
+    else:
+        print(f"Found: {len(results)} | Search: {search_ms} ms | Mode: {mode.upper()}")
     if synonyms:
         print(f"Synonyms (Ollama): {', '.join(synonyms)}")
     print("-" * 60)
@@ -65,8 +85,8 @@ def print_results(data: dict, query: str, mode: str, show_raw: bool = False) -> 
 
 def execute_single_search(url: str, query: str, mode: str, top: int, show_raw: bool = False):
     try:
-        data = run_search(url, query, mode, top)
-        print_results(data, query, mode, show_raw)
+        data, total_ms = run_search(url, query, mode, top)
+        print_results(data, query, mode, total_ms, show_raw)
         return 0
     except urllib.error.URLError as e:
         print(f"[ERROR] Failed to connect to server ({url}): {e}", file=sys.stderr)

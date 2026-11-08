@@ -40,6 +40,14 @@ let websocket = null;
 let benchmarkCounter = 0;
 let currentModalJson = '';
 let currentSearchMode = 'expanded';
+let searchSendTime = 0;
+
+function formatDuration(ms) {
+  if (ms >= 1000) {
+    return `${(ms / 1000).toFixed(2)} s`;
+  }
+  return `${ms} ms`;
+}
 
 function getBaseHttpUrl() {
   if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
@@ -185,11 +193,15 @@ modalCopyBtn.addEventListener('click', () => {
   });
 });
 
-function displayResults(data) {
+function displayResults(data, totalElapsedMs = null) {
   const results = data.results || [];
-  const timeMs = data.time_ms || 0;
+  const searchMs = data.time_ms || 0;
 
-  resultsHeading.textContent = `Found ${results.length} results (${timeMs} ms):`;
+  if (totalElapsedMs !== null) {
+    resultsHeading.textContent = `Found ${results.length} results (search: ${searchMs} ms, total: ${formatDuration(totalElapsedMs)}):`;
+  } else {
+    resultsHeading.textContent = `Found ${results.length} results (${searchMs} ms):`;
+  }
   resultsList.innerHTML = '';
 
   if (results.length === 0) {
@@ -270,6 +282,7 @@ function performSearch(query, top, mode = 'expanded') {
     } else {
       statusLine.textContent = 'Expanding query with Ollama...';
     }
+    searchSendTime = performance.now();
     websocket.send(JSON.stringify({ query: query, mode: mode, top: top }));
   };
 
@@ -297,7 +310,8 @@ function performSearch(query, top, mode = 'expanded') {
         displayExpansion(payload.data);
       }
     } else if (payload.stage === 'keyword_search') {
-      displayResults(payload.data);
+      const totalElapsedMs = Math.round(performance.now() - searchSendTime);
+      displayResults(payload.data, totalElapsedMs);
     } else if (payload.stage === 'done') {
       statusLine.textContent = '';
       searchBtn.disabled = false;
