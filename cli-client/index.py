@@ -2,7 +2,6 @@
 import argparse
 import json
 import sys
-import time
 import urllib.error
 import urllib.request
 
@@ -69,14 +68,12 @@ def run_single_build(base_url: str, threads: int) -> int:
         return 1
 
     print(f"\nStarting index build with {threads} threads...")
-    start_time = time.time()
     try:
         result = build_index(base_url, threads)
     except Exception as e:
         print(f"\n[ERROR] Failed to build index: {e}", file=sys.stderr)
         return 1
 
-    elapsed_wall = time.time() - start_time
     docs = result.get("documents_indexed", 0)
     server_ms = result.get("time_ms", 0)
     server_s = server_ms / 1000.0
@@ -84,8 +81,7 @@ def run_single_build(base_url: str, threads: int) -> int:
     print(f"\n[SUCCESS] Index built successfully!")
     print(f"  Documents indexed : {docs:,}")
     print(f"  Worker threads    : {threads}")
-    print(f"  Server build time : {server_ms} ms ({server_s:.2f} s)")
-    print(f"  Total wall time   : {elapsed_wall:.2f} s")
+    print(f"  Build time        : {server_ms} ms ({server_s:.2f} s)")
     return 0
 
 

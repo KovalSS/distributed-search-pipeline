@@ -221,8 +221,7 @@ Starting index build with 12 threads...
 [SUCCESS] Index built successfully!
   Documents indexed : 400,000
   Worker threads    : 12
-  Server build time : 10452 ms (10.45 s)
-  Total wall time   : 10.51 s
+  Build time        : 10452 ms (10.45 s)
 ```
 
 #### Варіант 2: Через cURL
