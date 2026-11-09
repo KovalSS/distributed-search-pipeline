@@ -70,11 +70,30 @@ docker compose up -d
 
 ### 2. Перевірка працездатності (Health Check)
 
+Перевірити готовність пошукового сервера та зв'язку з LLM Ollama можна через CLI-клієнт або напряму через HTTP:
+
+#### Варіант 1: Через CLI-клієнт
+
+```bash
+python cli-client/index.py --status
+```
+
+*Очікуваний вивід у консоль:*
+
+```text
+Checking server status (http://localhost:8080)...
+  Server: Online
+  Ollama (LLM): Ready
+  Index: Empty (0 documents). Build required.
+```
+
+#### Варіант 2: Через cURL
+
 ```bash
 curl http://localhost:8080/api/health
 ```
 
-Очікувана відповідь (HTTP 200 OK):
+*Очікувана відповідь (HTTP 200 OK):*
 
 ```json
 {"status":"ok","ollama":true}
@@ -147,13 +166,66 @@ python scripts/slice_dataset.py --input data/raw --output data/batched --batch-s
 
 Після запуску контейнера інвертований індекс знаходиться у пам'яті сервера. Для побудови індексу необхідно ініціювати паралельний процес індексації.
 
-### Варіант 1: Через CLI-клієнт
+Керувати побудовою та контролювати стан індексу можна як високорівнево через консольний клієнт `cli-client/index.py`, так і напряму через HTTP-запити за допомогою `curl`.
+
+### 1. Перевірка стану до побудови
+
+Перед запуском індексації можна переконатися, що база ще порожня та очікує наповнення:
+
+#### Варіант 1: Через CLI-клієнт
+
+```bash
+python cli-client/index.py --status
+```
+
+*Вивід у консоль:*
+
+```text
+Checking server status (http://localhost:8080)...
+  Server: Online
+  Ollama (LLM): Ready
+  Index: Empty (0 documents). Build required.
+```
+
+#### Варіант 2: Через cURL
+
+```bash
+curl http://localhost:8080/api/stats
+```
+
+*Очікувана відповідь:*
+
+```json
+{
+  "documents": 0,
+  "index_build_time_ms": 0,
+  "threads_used": 0
+}
+```
+
+### 2. Запуск паралельної побудови індексу
+
+#### Варіант 1: Через CLI-клієнт
 
 ```bash
 python cli-client/index.py --threads 12
 ```
 
-### Варіант 2: Через cURL
+*Вивід у консоль:*
+
+```text
+Connecting to http://localhost:8080...
+
+Starting index build with 12 threads...
+
+[SUCCESS] Index built successfully!
+  Documents indexed : 400,000
+  Worker threads    : 12
+  Server build time : 10452 ms (10.45 s)
+  Total wall time   : 10.51 s
+```
+
+#### Варіант 2: Через cURL
 
 ```bash
 curl -X POST http://localhost:8080/api/index \
@@ -161,28 +233,49 @@ curl -X POST http://localhost:8080/api/index \
   -d '{"threads": 12}'
 ```
 
-Очікувана відповідь сервера:
+*Очікувана відповідь сервера:*
 
 ```json
 {
   "status": "ok",
   "documents_indexed": 400000,
-  "time_ms": 19771
+  "time_ms": 10452
 }
 ```
 
-### Перевірка поточного стану індексу
+### 3. Перевірка поточного стану індексу після побудови
+
+Після завершення індексації перевірити стан бази та метрики можна також обома способами:
+
+#### Варіант 1: Через CLI-клієнт
+
+```bash
+python cli-client/index.py --status
+```
+
+*Вивід у консоль:*
+
+```text
+Checking server status (http://localhost:8080)...
+  Server: Online
+  Ollama (LLM): Ready
+  Index: Built (400,000 documents)
+  Last build time: 10452 ms (10.45 s)
+  Worker threads used: 12
+```
+
+#### Варіант 2: Через cURL
 
 ```bash
 curl http://localhost:8080/api/stats
 ```
 
-Відповідь:
+*Очікувана відповідь сервера:*
 
 ```json
 {
   "documents": 400000,
-  "index_build_time_ms": 19771,
+  "index_build_time_ms": 10452,
   "threads_used": 12
 }
 ```
@@ -238,19 +331,21 @@ python cli-client/search.py --mode keyword
 
 ### Консольне керування індексом (CLI Index)
 
-Скрипт `cli-client/index.py` забезпечує перевірку статусу та запуск побудови індексу:
+Скрипт `cli-client/index.py` забезпечує автономну перевірку статусу та запуск побудови індексу через термінал (детальні покрокові сценарії обох варіантів — через CLI та cURL — наведено у розділі [Побудова індексу (Індексація)](#побудова-індексу-індексація)):
 
 **Перевірка стану сервера та індексу:**
 
 ```bash
 python cli-client/index.py --status
 ```
+*(HTTP-еквівалент через cURL: `curl http://localhost:8080/api/stats` або `curl http://localhost:8080/api/health`)*
 
 **Паралельна побудова індексу з фіксацією кількості потоків:**
 
 ```bash
 python cli-client/index.py --threads 12
 ```
+*(HTTP-еквівалент через cURL: `curl -X POST http://localhost:8080/api/index -H "Content-Type: application/json" -d '{"threads": 12}'`)*
 
 **Параметри `cli-client/index.py`:**
 - `--threads`, `-t`: кількість робочих потоків для побудови індексу (за замовчуванням `8`);
