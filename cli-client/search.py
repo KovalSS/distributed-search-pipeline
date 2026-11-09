@@ -99,21 +99,23 @@ def execute_single_search(url: str, query: str, mode: str, top: int, show_raw: b
 def interactive_mode(url: str, mode: str, top: int, show_raw: bool = False):
     current_mode = mode
     current_show_raw = show_raw
+    current_top = top
 
     print("=" * 65)
     print("                INTERACTIVE SEARCH MODE (CLI)")
-    print(f"  Mode: {current_mode.upper()} | Show Raw Data: {'ON' if current_show_raw else 'OFF'}")
+    print(f"  Mode: {current_mode.upper()} | Top: {current_top} | Show Raw Data: {'ON' if current_show_raw else 'OFF'}")
     print("  Commands:")
-    print("    :keyword  / :kw   - switch to Keyword mode")
-    print("    :expanded / :exp  - switch to Expanded (AI) mode")
-    print("    :raw              - toggle raw data display (ON/OFF)")
-    print("    q / exit          - quit")
+    print("    :keyword  / :kw    - switch to Keyword mode")
+    print("    :expanded / :exp   - switch to Expanded (AI) mode")
+    print("    :top <N>  / :k <N> - set number of results (e.g. :top 10)")
+    print("    :raw               - toggle raw data display (ON/OFF)")
+    print("    q / exit           - quit")
     print("=" * 65 + "\n")
 
     while True:
         try:
             raw_indicator = "+raw" if current_show_raw else ""
-            prompt_mode = f"{current_mode}{raw_indicator}"
+            prompt_mode = f"{current_mode}{raw_indicator}, top {current_top}"
             query = input(f"Search [{prompt_mode}] > ").strip()
             if not query:
                 continue
@@ -132,8 +134,16 @@ def interactive_mode(url: str, mode: str, top: int, show_raw: bool = False):
                 current_show_raw = not current_show_raw
                 print(f"Raw data display: {'ON' if current_show_raw else 'OFF'}\n")
                 continue
+            if query.lower().startswith((":top", ":k")):
+                parts = query.split()
+                if len(parts) == 2 and parts[1].isdigit() and int(parts[1]) > 0:
+                    current_top = int(parts[1])
+                    print(f"Results limit set to: {current_top}\n")
+                else:
+                    print("Usage: :top <number> (e.g. :top 10)\n")
+                continue
 
-            execute_single_search(url, query, current_mode, top, current_show_raw)
+            execute_single_search(url, query, current_mode, current_top, current_show_raw)
         except (KeyboardInterrupt, EOFError):
             print("\nExiting search.")
             break
