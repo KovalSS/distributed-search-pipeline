@@ -178,10 +178,21 @@ public class IndexingService {
 
     private List<List<Path>> splitIntoChunks(List<Path> files, int chunkCount) {
         List<List<Path>> chunks = new java.util.ArrayList<>();
-        int chunkSize = (int) Math.ceil((double) files.size() / chunkCount);
+        int total = files.size();
+        if (total == 0 || chunkCount <= 0) {
+            return chunks;
+        }
 
-        for (int i = 0; i < files.size(); i += chunkSize) {
-            chunks.add(files.subList(i, Math.min(i + chunkSize, files.size())));
+        int baseSize = total / chunkCount;
+        int remainder = total % chunkCount;
+
+        int startIndex = 0;
+        for (int i = 0; i < chunkCount; i++) {
+            int currentChunkSize = baseSize + (i < remainder ? 1 : 0);
+            if (currentChunkSize > 0) {
+                chunks.add(files.subList(startIndex, startIndex + currentChunkSize));
+                startIndex += currentChunkSize;
+            }
         }
         return chunks;
     }
